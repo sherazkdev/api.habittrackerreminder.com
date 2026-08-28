@@ -1,5 +1,3 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
 /node_modules
 /.pnp
@@ -22,7 +20,10 @@
 
 # misc
 .DS_Store
+Thumbs.db
+Desktop.ini
 *.pem
+*.log
 
 # debug
 npm-debug.log*
@@ -30,12 +31,32 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env — never commit secrets; keep the example
+.env
+.env.*
+!.env.example
 
-# vercel
+# vercel / caches
 .vercel
+.turbo
+.cache
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Next.js auto-generated agent files
+AGENTS.md
+CLAUDE.md
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# generated docs
+.requirements/*.pdf
+
+# unused Phosphor icon pack — only files referenced in src/lib/icons.ts are tracked
+public/assets/**/*.svg
