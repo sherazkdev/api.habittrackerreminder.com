@@ -20,7 +20,10 @@ export async function GET() {
       ready: "/ready",
       admin: "/admin/login",
       reminder: "/api/v1/habits/reminder",
+      reminderSpec: "/api/habits/reminder",
       devices: "/api/v1/devices",
+      cron: "/api/v1/habits/cron/reminder",
+      cronSpec: "/api/cron/reminders",
     },
   });
 }

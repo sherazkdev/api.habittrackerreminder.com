@@ -121,9 +121,33 @@ export function buildOpenApiSpec(audience: Audience = "full") {
           content: { "application/json": { schema: reminderSchema } },
         },
         responses: {
-          200: { description: "Upserted", content: { "application/json": { schema: envelope({ type: "object" }) } } },
+          200: {
+            description: "Upserted. Spec shape: success, habitId, scheduledTimes.",
+            content: { "application/json": { schema: envelope({ type: "object" }) } },
+          },
           401: { description: "Unauthorized" },
         },
+      },
+    },
+    "/api/habits/reminder": {
+      post: {
+        tags: ["Mobile"],
+        summary: "Create or replace one habit reminder (spec path)",
+        description: "Alias of POST /api/v1/habits/reminder for the Flutter spec.",
+        security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
+        parameters: [
+          {
+            name: "x-user-id",
+            in: "header",
+            required: false,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: reminderSchema } },
+        },
+        responses: { 200: { description: "Upserted" }, 401: { description: "Unauthorized" } },
       },
     },
     "/api/v1/habits/reminder/{habitId}": {
@@ -138,10 +162,35 @@ export function buildOpenApiSpec(audience: Audience = "full") {
         responses: { 200: { description: "Deleted" }, 404: { description: "Not found" } },
       },
     },
+    "/api/habits/reminder/{habitId}": {
+      delete: {
+        tags: ["Mobile"],
+        summary: "Delete a habit reminder (spec path)",
+        security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
+        parameters: [
+          { name: "habitId", in: "path", required: true, schema: { type: "string" } },
+          { name: "x-user-id", in: "header", required: false, schema: { type: "string" } },
+        ],
+        responses: { 200: { description: "Deleted" }, 404: { description: "Not found" } },
+      },
+    },
     "/api/v1/habits/reminder/bulk": {
       post: {
         tags: ["Mobile"],
         summary: "Bulk upsert reminders",
+        security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
+        parameters: [{ name: "x-user-id", in: "header", required: false, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "array", items: reminderSchema } } },
+        },
+        responses: { 200: { description: "Upserted" } },
+      },
+    },
+    "/api/habits/reminder/bulk": {
+      post: {
+        tags: ["Mobile"],
+        summary: "Bulk upsert reminders (spec path)",
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
         parameters: [{ name: "x-user-id", in: "header", required: false, schema: { type: "string" } }],
         requestBody: {
@@ -197,6 +246,14 @@ export function buildOpenApiSpec(audience: Audience = "full") {
       get: {
         tags: ["Cron"],
         summary: "Dispatch due reminders",
+        security: [{ cronSecret: [] }],
+        responses: { 200: { description: "Dispatch result" }, 401: { description: "Unauthorized" } },
+      },
+    },
+    "/api/cron/reminders": {
+      get: {
+        tags: ["Cron"],
+        summary: "Dispatch due reminders (spec path)",
         security: [{ cronSecret: [] }],
         responses: { 200: { description: "Dispatch result" }, 401: { description: "Unauthorized" } },
       },

@@ -8,6 +8,7 @@ export type DashboardAnalytics = {
   sentToday: number;
   failedToday: number;
   deliveryRate: number;
+  deliveryRatePercent?: number;
   usersWithDevices: number;
   usersWithoutDevices: number;
   weekDeliveries: number;
@@ -24,6 +25,9 @@ export type DashboardAnalytics = {
     createdAt: string;
     tokenCount: number;
   }>;
+  stale?: boolean;
+  cached?: boolean;
+  generatedAt?: string;
 };
 
 export async function fetchDashboardAnalytics(): Promise<DashboardAnalytics> {

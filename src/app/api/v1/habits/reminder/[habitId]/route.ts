@@ -1,5 +1,5 @@
-import { NextRequest } from "next/server";
-import { apiError, apiOk } from "@/lib/api-response";
+import { NextRequest, NextResponse } from "next/server";
+import { apiError } from "@/lib/api-response";
 import { resolveAppUserId } from "@/lib/mobile-auth";
 import { deleteReminder } from "@/lib/reminders";
 
@@ -21,5 +21,5 @@ export async function DELETE(
 
   const deleted = await deleteReminder(userId, habitId.trim());
   if (!deleted) return apiError("NOT_FOUND", "Reminder not found", 404);
-  return apiOk({ success: true, habitId: habitId.trim() });
+  return NextResponse.json({ success: true, habitId: habitId.trim() });
 }

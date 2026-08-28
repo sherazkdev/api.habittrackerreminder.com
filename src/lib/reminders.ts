@@ -2,7 +2,7 @@ import { Reminder } from "@/models/Reminder";
 import { User } from "@/models/User";
 import { NotificationDelivery } from "@/models/NotificationDelivery";
 import { connectDB } from "@/lib/db";
-import { computeScheduledTimes, currentClock } from "@/lib/schedule";
+import { computeScheduledTimes, currentClock, dueReminderFilter } from "@/lib/schedule";
 import { reminderPayloadSchema, type ReminderPayload } from "@/lib/reminder-validation";
 import { removeDeadTokens, sendHabitPush } from "@/lib/fcm";
 import { env } from "@/lib/env";
@@ -53,19 +53,13 @@ export async function getDueReminders(now = new Date()) {
   await connectDB();
   const clock = currentClock(env.reminderTimezone());
   void now;
-  return Reminder.find({
-    scheduledTimes: clock.time,
-    $or: [{ days: "Everyday" }, { days: clock.day }],
-  }).lean();
+  return Reminder.find(dueReminderFilter(clock)).lean();
 }
 
 export async function dispatchDueReminders() {
   await connectDB();
   const clock = currentClock(env.reminderTimezone());
-  const due = await Reminder.find({
-    scheduledTimes: clock.time,
-    $or: [{ days: "Everyday" }, { days: clock.day }],
-  }).lean();
+  const due = await Reminder.find(dueReminderFilter(clock)).lean();
 
   let sent = 0;
   let failed = 0;

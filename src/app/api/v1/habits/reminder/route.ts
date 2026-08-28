@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { apiError, apiOk } from "@/lib/api-response";
+import { apiError, apiOkFields } from "@/lib/api-response";
 import { resolveAppUserId } from "@/lib/mobile-auth";
 import { parseReminderPayload, upsertReminder } from "@/lib/reminders";
 
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
   }
 
   const result = await upsertReminder(userId, parsed.data);
-  return apiOk(result);
+  return apiOkFields(result);
 }
 
 export async function DELETE() {

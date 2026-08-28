@@ -8,7 +8,7 @@ import { adminPath } from "@/lib/admin-path";
 import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import type { IconName } from "@/lib/icons";
 import { apiGet } from "@/lib/api-client";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { FcmDeliveryChart } from "@/components/notifications/fcm-overview-panels";
 import { DistributionDonut } from "@/components/dashboard/recharts-charts";
 import { cn } from "@/lib/cn";
@@ -30,6 +30,8 @@ type DashboardStats = {
   statusBreakdown?: Array<{ label: string; value: number; color: string }>;
   reminderModes?: Array<{ label: string; value: number; color: string }>;
   recentDeliveries?: Array<{ id: string; habitName: string; status: string; createdAt: string }>;
+  stale?: boolean;
+  cached?: boolean;
 };
 
 function StatTile({
@@ -80,15 +82,22 @@ export function HabitDashboardOverview() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [data, setData] = useState<DashboardStats | null>(null);
+  const dataRef = useRef<DashboardStats | null>(null);
+  dataRef.current = data;
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
+    const hasData = dataRef.current != null;
+    if (!hasData) setLoading(true);
     try {
-      setData(await apiGet<DashboardStats>("/api/admin/dashboard"));
+      const next = await apiGet<DashboardStats>("/api/admin/dashboard");
+      setData(next);
+      setError(next.stale ? "Mongo was busy. Showing the last good snapshot." : "");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Unable to load dashboard.");
-      setData(null);
+      if (!hasData) {
+        setError(err instanceof ApiError ? err.message : "Unable to load dashboard.");
+      } else {
+        setError("Live refresh failed. Showing the last loaded numbers.");
+      }
     } finally {
       setLoading(false);
     }

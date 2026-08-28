@@ -38,6 +38,21 @@ export function weekdayName(date: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone }).format(date);
 }
 
+export function isReminderDue(
+  reminder: { scheduledTimes: string[]; days: string[] },
+  clock: { day: string; time: string },
+): boolean {
+  if (!reminder.scheduledTimes.includes(clock.time)) return false;
+  return reminder.days.includes("Everyday") || reminder.days.includes(clock.day);
+}
+
+export function dueReminderFilter(clock: { day: string; time: string }) {
+  return {
+    scheduledTimes: clock.time,
+    $or: [{ days: "Everyday" }, { days: clock.day }],
+  };
+}
+
 export function currentClock(timeZone: string): { day: string; time: string } {
   const now = new Date();
   const parts = new Intl.DateTimeFormat("en-GB", {

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { apiError, apiOk } from "@/lib/api-response";
+import { apiError, apiOkFields } from "@/lib/api-response";
 import { resolveAppUserId } from "@/lib/mobile-auth";
 import { bulkUpsertReminders, parseReminderPayload } from "@/lib/reminders";
 import { reminderPayloadSchema } from "@/lib/reminder-validation";
@@ -32,5 +32,7 @@ export async function POST(request: NextRequest) {
   }
 
   const results = await bulkUpsertReminders(userId, parsed.data);
-  return apiOk({ results });
+  return apiOkFields({
+    results: results.map((item) => ({ success: true, ...item })),
+  });
 }

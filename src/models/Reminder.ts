@@ -19,5 +19,6 @@ const ReminderSchema = new Schema(
 );
 
 ReminderSchema.index({ userId: 1, habitId: 1 }, { unique: true });
+ReminderSchema.index({ scheduledTimes: 1, days: 1 });
 
 export const Reminder = models.Reminder ?? model("Reminder", ReminderSchema);
