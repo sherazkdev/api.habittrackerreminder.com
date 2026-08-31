@@ -91,5 +91,8 @@ export async function sendHabitPush(input: {
 
 export async function removeDeadTokens(userId: string, tokens: string[]) {
   if (tokens.length === 0) return;
-  await User.updateOne({ userId }, { $pull: { fcmTokens: { $in: tokens } } });
+  await User.updateOne(
+    { userId },
+    { $pull: { fcmTokens: { $in: tokens }, deviceMeta: { token: { $in: tokens } } } },
+  );
 }

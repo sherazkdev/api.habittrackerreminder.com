@@ -149,7 +149,7 @@ export function HabitDashboardOverview() {
           tone="purple"
         />
         <StatTile
-          href={adminPath("/notifications/fcm-overview")}
+          href={adminPath("/notifications/devices")}
           icon="broadcast"
           label="Registered devices"
           value={loading ? "…" : String(data?.registeredDevices ?? 0)}

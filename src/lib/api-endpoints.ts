@@ -19,8 +19,8 @@ export const MOBILE_ENDPOINTS: EndpointRow[] = [
   { method: "POST", path: "/api/v1/habits/reminder", desc: "Create or replace one habit reminder", auth: "bearer", group: "Mobile v1" },
   { method: "DELETE", path: "/api/v1/habits/reminder/:habitId", desc: "Delete a habit reminder", auth: "bearer", group: "Mobile v1" },
   { method: "POST", path: "/api/v1/habits/reminder/bulk", desc: "Bulk upsert reminders", auth: "bearer", group: "Mobile v1" },
-  { method: "POST", path: "/api/v1/devices", desc: "Register FCM token. Body: { fcm_token, platform? }", auth: "bearer", group: "Mobile v1" },
-  { method: "DELETE", path: "/api/v1/devices", desc: "Unregister FCM token. Body: { fcm_token }", auth: "bearer", group: "Mobile v1" },
+  { method: "POST", path: "/api/v1/devices", desc: "Register FCM token. Firebase Bearer, or x-api-key + { fcm_token }. API-key also sends a test reminder.", auth: "bearer-or-key", group: "Mobile v1" },
+  { method: "DELETE", path: "/api/v1/devices", desc: "Unregister FCM token. Body: { fcm_token }", auth: "bearer-or-key", group: "Mobile v1" },
   { method: "GET", path: "/api/v1/habits/cron/reminder", desc: "Dispatch due reminders this minute", auth: "cron", group: "Cron" },
 ];
 
@@ -42,6 +42,9 @@ export const ADMIN_CONTENT_ENDPOINTS: EndpointRow[] = [
   { method: "GET", path: "/api/admin/system", desc: "System status", auth: "bearer-or-key", group: "Admin" },
   { method: "GET", path: "/api/admin/fcm/overview", desc: "FCM overview dashboard data", auth: "bearer-or-key", group: "Admin" },
   { method: "POST", path: "/api/admin/fcm/test-notification", desc: "Send FCM test push. Body: { fcm_token }", auth: "bearer-or-key", group: "Admin" },
+  { method: "GET", path: "/api/admin/devices/summary", desc: "Device counts and platform split", auth: "bearer-or-key", group: "Admin" },
+  { method: "GET", path: "/api/admin/devices", desc: "List registered FCM devices", auth: "bearer-or-key", group: "Admin" },
+  { method: "DELETE", path: "/api/admin/devices/:id", desc: "Remove a registered FCM token", auth: "bearer-or-key", group: "Admin" },
 ];
 
 export const ALL_ENDPOINT_GROUPS = [

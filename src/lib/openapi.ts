@@ -204,8 +204,9 @@ export function buildOpenApiSpec(audience: Audience = "full") {
       post: {
         tags: ["Mobile"],
         summary: "Register FCM device token",
+        description:
+          "Identify the user from a Firebase Bearer token, **or** from `x-api-key` plus the `fcm_token` in the body. Do **not** send `x-user-id`. Admin/API-key calls also send a test reminder to that token.",
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
-        parameters: [{ name: "x-user-id", in: "header", required: false, schema: { type: "string" } }],
         requestBody: {
           required: true,
           content: {
@@ -214,18 +215,48 @@ export function buildOpenApiSpec(audience: Audience = "full") {
                 type: "object",
                 required: ["fcm_token"],
                 properties: {
-                  fcm_token: { type: "string" },
-                  platform: { type: "string", enum: ["android", "ios"] },
+                  fcm_token: {
+                    type: "string",
+                    description: "FCM registration token from the phone. Used to find or create the user when calling with x-api-key.",
+                    example: "dXyz...:APA91b...",
+                  },
+                  platform: { type: "string", enum: ["android", "ios"], example: "android" },
                 },
               },
             },
           },
         },
-        responses: { 200: { description: "Registered" } },
+        responses: {
+          200: {
+            description: "Token saved. API-key calls also include a reminder send result.",
+            content: {
+              "application/json": {
+                schema: envelope({
+                  type: "object",
+                  properties: {
+                    registered: { type: "boolean", example: true },
+                    userId: { type: "string" },
+                    reminder: {
+                      type: "object",
+                      properties: {
+                        successCount: { type: "integer" },
+                        failureCount: { type: "integer" },
+                        status: { type: "string", enum: ["delivered", "partial", "failed", "skipped"] },
+                        error: { type: "string" },
+                      },
+                    },
+                  },
+                }),
+              },
+            },
+          },
+          401: { description: "Missing Firebase Bearer or x-api-key" },
+        },
       },
       delete: {
         tags: ["Mobile"],
         summary: "Unregister FCM device token",
+        description: "Firebase Bearer, or x-api-key + body fcm_token. No x-user-id header.",
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -239,7 +270,7 @@ export function buildOpenApiSpec(audience: Audience = "full") {
             },
           },
         },
-        responses: { 200: { description: "Unregistered" } },
+        responses: { 200: { description: "Unregistered" }, 401: { description: "Unauthorized" } },
       },
     },
     "/api/v1/habits/cron/reminder": {
@@ -403,6 +434,38 @@ export function buildOpenApiSpec(audience: Audience = "full") {
         responses: { 200: { description: "Send result" } },
       },
     },
+    "/api/admin/devices/summary": {
+      get: {
+        tags: ["Admin"],
+        summary: "Registered device summary",
+        security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
+        responses: { 200: { description: "Stats and analytics" } },
+      },
+    },
+    "/api/admin/devices": {
+      get: {
+        tags: ["Admin"],
+        summary: "List registered FCM devices",
+        security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
+        parameters: [
+          { name: "platform", in: "query", schema: { type: "string", enum: ["android", "ios"] } },
+          { name: "status", in: "query", schema: { type: "string", enum: ["active", "stale"] } },
+          { name: "search", in: "query", schema: { type: "string" } },
+          { name: "page", in: "query", schema: { type: "integer" } },
+          { name: "limit", in: "query", schema: { type: "integer" } },
+        ],
+        responses: { 200: { description: "Device list" } },
+      },
+    },
+    "/api/admin/devices/{id}": {
+      delete: {
+        tags: ["Admin"],
+        summary: "Remove a registered FCM token",
+        security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Removed" }, 404: { description: "Not found" } },
+      },
+    },
   };
 
   return {
@@ -412,14 +475,14 @@ export function buildOpenApiSpec(audience: Audience = "full") {
       version: env.appVersion(),
       description:
         audience === "public"
-          ? "Mobile habit reminder APIs. Authorize with a Firebase ID token (Bearer), or an admin x-api-key plus `x-user-id`."
-          : "Use **Authorize** for either Bearer JWT (from `/api/admin/login`) or `x-api-key` (from Settings → API Keys). Admin analytics accept both. Change-password and API-key management are Bearer-only. Mobile routes accept a Firebase ID token, or admin auth plus `x-user-id`.",
+          ? "Mobile APIs. **Reminders:** Firebase ID token (Bearer), or admin `x-api-key` plus `x-user-id`. **Devices:** Firebase Bearer, or `x-api-key` plus body `fcm_token` — no `x-user-id`."
+          : "Use **Authorize** for Bearer JWT (`POST /api/admin/login`) or `x-api-key` (Settings → API Keys). Admin analytics accept both. **Devices** (`POST /api/v1/devices`): Firebase Bearer **or** `x-api-key` + `{ fcm_token }` — do not send `x-user-id`. Reminder write routes still need a Firebase token, or `x-api-key` + `x-user-id`.",
     },
     servers: servers(),
     tags: [
       { name: "Platform", description: "Health and readiness" },
       { name: "Public", description: "Discovery and OpenAPI" },
-      { name: "Mobile", description: "Flutter app — Firebase Bearer" },
+      { name: "Mobile", description: "Flutter app. Devices: Firebase Bearer or x-api-key + fcm_token. Reminders: Firebase Bearer or x-api-key + x-user-id." },
       { name: "Cron", description: "Scheduler" },
       { name: "Admin auth", description: "Admin login and password" },
       { name: "API keys", description: "x-api-key management (Bearer only)" },

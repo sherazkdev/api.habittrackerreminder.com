@@ -1,67 +1,16 @@
 import { apiDelete, apiGet } from "@/lib/api-client";
+import type { DeviceFilters, DeviceListResponse, DeviceSummaryResponse } from "@/lib/devices-shared";
 
-export type DeviceRow = {
-  id: number;
-  firebaseUid: string;
-  platform: "android" | "ios";
-  fcmToken: string;
-  fcmTokenMasked: string;
-  status: "active" | "stale";
-  lastSeenAt: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type DeviceStats = {
-  total: number;
-  active: number;
-  stale: number;
-  activePercent: number;
-  android: number;
-  ios: number;
-  androidPercent: number;
-  iosPercent: number;
-};
-
-export type DeviceAnalytics = {
-  healthSplit: Array<{ label: string; value: number; color: string }>;
-  platformSplit: {
-    android: number;
-    ios: number;
-    androidPercent: number;
-    iosPercent: number;
-  };
-  activity: {
-    registeredToday: number;
-    refreshedToday: number;
-  };
-};
-
-export type DeviceListResponse = {
-  items: DeviceRow[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-    nextCursor: number | null;
-  };
-};
-
-export type DeviceSummaryResponse = {
-  stats: DeviceStats;
-  analytics: DeviceAnalytics;
-  computedAt: string;
-};
-
-export type DeviceFilters = {
-  platform?: "android" | "ios";
-  status?: "active" | "stale";
-  search?: string;
-  page?: number;
-  limit?: number;
-  cursor?: number;
-};
+export type {
+  DeviceAnalytics,
+  DeviceFilters,
+  DeviceListResponse,
+  DevicePlatform,
+  DeviceRow,
+  DeviceStats,
+  DeviceSummaryResponse,
+} from "@/lib/devices-shared";
+export { formatRelativeTime, maskToken, shortUid } from "@/lib/devices-shared";
 
 function toQuery(filters: DeviceFilters): string {
   const params = new URLSearchParams();
@@ -83,25 +32,6 @@ export async function fetchDevicesAdmin(filters: DeviceFilters = {}): Promise<De
   return apiGet<DeviceListResponse>(`/api/admin/devices${toQuery(filters)}`);
 }
 
-export async function deleteDeviceAdmin(id: number): Promise<void> {
-  await apiDelete<{ message: string }>(`/api/admin/devices/${id}`);
-}
-
-export function shortUid(uid: string): string {
-  if (uid.length <= 12) return uid;
-  return `${uid.slice(0, 6)}…${uid.slice(-4)}`;
-}
-
-export function formatRelativeTime(value: string): string {
-  const date = new Date(value);
-  const diffMs = Date.now() - date.getTime();
-  if (diffMs < 60_000) return "Just now";
-  const minutes = Math.floor(diffMs / 60_000);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days}d ago`;
-  return date.toLocaleDateString();
+export async function deleteDeviceAdmin(id: string): Promise<void> {
+  await apiDelete<{ message: string }>(`/api/admin/devices/${encodeURIComponent(id)}`);
 }

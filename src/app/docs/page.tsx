@@ -5,7 +5,7 @@ export default function DocsPage() {
     <SwaggerConsole
       specUrl="/api/v1/openapi.json"
       title="API documentation"
-      subtitle="Try every route here. Click Authorize and add a Bearer JWT from login, or an x-api-key from Settings → API Keys."
+      subtitle="Authorize with Bearer JWT or x-api-key. Devices need only the key plus body fcm_token — no x-user-id."
     />
   );
 }

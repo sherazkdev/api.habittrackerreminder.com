@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { Reminder } from "@/models/Reminder";
 import { User } from "@/models/User";
 import { NotificationDelivery } from "@/models/NotificationDelivery";
@@ -120,18 +121,76 @@ export async function dispatchDueReminders() {
   };
 }
 
-export async function registerDevice(userId: string, fcmToken: string, _platform?: string) {
+export async function registerDevice(
+  userId: string,
+  fcmToken: string,
+  platform?: "android" | "ios",
+) {
   await connectDB();
-  await User.findOneAndUpdate(
+  const now = new Date();
+  const user = await User.findOneAndUpdate(
     { userId },
     { $addToSet: { fcmTokens: fcmToken } },
-    { upsert: true, new: true },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
   );
+
+  const hasMeta = Boolean(user.deviceMeta?.some((item: { token: string }) => item.token === fcmToken));
+  if (hasMeta) {
+    await User.updateOne(
+      { userId, "deviceMeta.token": fcmToken },
+      {
+        $set: {
+          "deviceMeta.$.lastSeenAt": now,
+          ...(platform ? { "deviceMeta.$.platform": platform } : {}),
+        },
+      },
+    );
+  } else {
+    await User.updateOne(
+      { userId },
+      {
+        $push: {
+          deviceMeta: {
+            token: fcmToken,
+            ...(platform ? { platform } : {}),
+            lastSeenAt: now,
+            createdAt: now,
+          },
+        },
+      },
+    );
+  }
   return { registered: true, userId };
 }
 
 export async function unregisterDevice(userId: string, fcmToken: string) {
   await connectDB();
-  await User.updateOne({ userId }, { $pull: { fcmTokens: fcmToken } });
+  await User.updateOne(
+    { userId },
+    { $pull: { fcmTokens: fcmToken, deviceMeta: { token: fcmToken } } },
+  );
   return { unregistered: true, userId };
+}
+
+export async function findUserIdByFcmToken(fcmToken: string): Promise<string | null> {
+  await connectDB();
+  const user = await User.findOne({ fcmTokens: fcmToken }).lean();
+  return user?.userId ?? null;
+}
+
+export function userIdFromFcmToken(fcmToken: string) {
+  return `fcm-${createHash("sha256").update(fcmToken).digest("hex").slice(0, 24)}`;
+}
+
+export async function resolveUserIdForFcmToken(fcmToken: string): Promise<string> {
+  return (await findUserIdByFcmToken(fcmToken)) ?? userIdFromFcmToken(fcmToken);
+}
+
+export async function unregisterDeviceByToken(fcmToken: string) {
+  await connectDB();
+  const result = await User.updateMany(
+    { fcmTokens: fcmToken },
+    { $pull: { fcmTokens: fcmToken, deviceMeta: { token: fcmToken } } },
+  );
+  return { unregistered: result.modifiedCount > 0, fcmToken };
 }

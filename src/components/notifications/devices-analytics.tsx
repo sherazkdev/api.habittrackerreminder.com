@@ -55,6 +55,9 @@ export function DevicesAnalyticsPanel({
         <div className="flex flex-col gap-3">
           <PlatformBar label="Android" percent={platformSplit.androidPercent} tone="purple" />
           <PlatformBar label="iOS" percent={platformSplit.iosPercent} tone="blue" />
+          {platformSplit.unknown > 0 ? (
+            <PlatformBar label="Unknown" percent={platformSplit.unknownPercent} tone="muted" />
+          ) : null}
         </div>
       </PanelCard>
 
@@ -85,9 +88,10 @@ function PlatformBar({
 }: {
   label: string;
   percent: number;
-  tone: "purple" | "blue";
+  tone: "purple" | "blue" | "muted";
 }) {
-  const color = tone === "purple" ? "var(--bright-purple)" : "var(--chart-blue)";
+  const color =
+    tone === "purple" ? "var(--bright-purple)" : tone === "blue" ? "var(--chart-blue)" : "var(--text-muted)";
   return (
     <div>
       <div className="mb-1 flex items-center justify-between text-[12px] leading-[18px]">

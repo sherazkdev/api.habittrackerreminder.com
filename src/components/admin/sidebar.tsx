@@ -34,6 +34,7 @@ const sections: NavSection[] = [
     label: "Notifications",
     items: [
       { href: adminPath("/notifications/fcm-overview"), label: "FCM Overview", icon: "broadcast" },
+      { href: adminPath("/notifications/devices"), label: "Devices", icon: "userCircle" },
     ],
   },
   {
@@ -74,6 +75,7 @@ export function Sidebar() {
       ? [
           { href: ADMIN_BASE, label: "Dashboard" },
           { href: adminPath("/notifications/fcm-overview"), label: "FCM Overview" },
+          { href: adminPath("/notifications/devices"), label: "Devices" },
         ]
       : [
           { href: adminPath("/settings/api-keys"), label: "API Keys" },

@@ -1,20 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-response";
-import { resolveAppUserId } from "@/lib/mobile-auth";
+import { resolveAppUser } from "@/lib/mobile-auth";
 import { deleteReminder } from "@/lib/reminders";
 
 export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ habitId: string }> },
 ) {
-  const userId = await resolveAppUserId(request);
-  if (!userId) {
-    return apiError(
-      "UNAUTHORIZED",
-      "Firebase Bearer token required, or admin Bearer / x-api-key plus x-user-id",
-      401,
-    );
-  }
+  const auth = await resolveAppUser(request);
+  if (!auth.ok) return apiError("UNAUTHORIZED", auth.message, 401);
+  const userId = auth.userId;
 
   const { habitId } = await context.params;
   if (!habitId?.trim()) return apiError("VALIDATION_ERROR", "habitId is required", 400);

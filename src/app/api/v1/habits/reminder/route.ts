@@ -1,17 +1,12 @@
 import { NextRequest } from "next/server";
 import { apiError, apiOkFields } from "@/lib/api-response";
-import { resolveAppUserId } from "@/lib/mobile-auth";
+import { resolveAppUser } from "@/lib/mobile-auth";
 import { parseReminderPayload, upsertReminder } from "@/lib/reminders";
 
 export async function POST(request: NextRequest) {
-  const userId = await resolveAppUserId(request);
-  if (!userId) {
-    return apiError(
-      "UNAUTHORIZED",
-      "Firebase Bearer token required, or admin Bearer / x-api-key plus x-user-id",
-      401,
-    );
-  }
+  const auth = await resolveAppUser(request);
+  if (!auth.ok) return apiError("UNAUTHORIZED", auth.message, 401);
+  const userId = auth.userId;
 
   let body: unknown;
   try {

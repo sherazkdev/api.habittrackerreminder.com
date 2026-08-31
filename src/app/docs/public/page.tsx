@@ -5,7 +5,7 @@ export default function PublicDocsPage() {
     <SwaggerConsole
       specUrl="/api/v1/openapi.json?audience=public"
       title="Public & mobile API"
-      subtitle="Health, discovery, habit reminders, and devices. Use a Firebase Bearer token, or an admin key plus x-user-id."
+      subtitle="Health, discovery, habit reminders, and devices. Use a Firebase Bearer token. Devices also accept x-api-key plus fcm_token."
     />
   );
 }

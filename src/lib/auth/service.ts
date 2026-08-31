@@ -131,10 +131,15 @@ export async function requireAdmin(request: NextRequest) {
   return verifyBearerAdmin(token);
 }
 
+export function getApiKeyHeader(request: NextRequest): string | null {
+  const key = request.headers.get("x-api-key")?.trim() || request.headers.get("x-apikey")?.trim();
+  return key || null;
+}
+
 export async function requireAdminOrApiKey(request: NextRequest) {
   const bearerAdmin = await requireAdmin(request);
   if (bearerAdmin) return bearerAdmin;
-  const apiKey = request.headers.get("x-api-key")?.trim();
+  const apiKey = getApiKeyHeader(request);
   if (!apiKey) return null;
   return verifyApiKey(apiKey);
 }

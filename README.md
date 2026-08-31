@@ -29,7 +29,8 @@ Mobile reminder routes also exist at the spec paths (`/api/habits/reminder`, `/a
 
 - Admin dashboard: Bearer JWT from `POST /api/admin/login`
 - Admin APIs: Bearer JWT **or** `x-api-key`
-- Mobile reminder/device APIs: Firebase ID token, or admin auth plus `x-user-id`
+- Devices (`POST /api/v1/devices`): Firebase ID token, or `x-api-key` plus body `fcm_token` (no `x-user-id`)
+- Other mobile reminder APIs: Firebase ID token, or admin auth plus `x-user-id`
 - Cron: `Authorization: Bearer <CRON_SECRET>` or `x-cron-secret`
 
 ## Deploy on Contabo VPS
@@ -45,4 +46,4 @@ Vercel cron does **not** run on a VPS. Use Nginx + PM2 (`habit-api` + `habit-cro
 
 Or run `DOMAIN=api.habittrackerreminder.com bash deploy/contabo.sh` (creates `.env.local` on first run — fill secrets, run again).
 
-Keep port `3000` bound to localhost only. Atlas: allow the VPS public IP. First admin: `npm run seed` once on the server, then leave `ADMIN_SEED_ENABLED=false`.
+Keep port `3012` bound to localhost only (Nginx proxies 443 → 3012). Atlas: allow the VPS public IP. First admin: `npm run seed` once on the server, then leave `ADMIN_SEED_ENABLED=false`.

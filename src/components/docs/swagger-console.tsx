@@ -97,6 +97,9 @@ export function SwaggerConsole({
           <span className="rounded-full bg-[rgb(161_227_203/0.2)] px-2.5 py-1 text-[var(--text-secondary)]">
             Authorize → x-api-key
           </span>
+          <span className="rounded-full bg-[rgb(255_203_102/0.2)] px-2.5 py-1 text-[var(--text-secondary)]">
+            Devices → x-api-key + fcm_token
+          </span>
         </div>
       </header>
       <div className="swagger-wrap mx-auto max-w-[1100px] px-2 pb-16">
