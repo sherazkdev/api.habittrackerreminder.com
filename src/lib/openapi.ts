@@ -105,7 +105,8 @@ export function buildOpenApiSpec(audience: Audience = "full") {
       post: {
         tags: ["Mobile"],
         summary: "Create or replace one habit reminder",
-        description: "Firebase Bearer, or admin Bearer / x-api-key plus the x-user-id header.",
+        description:
+          "Saves or replaces the habit schedule only — does not send a notification. Firebase Bearer, or admin `x-api-key` plus `x-user-id`. The cron worker sends the push when the scheduled time is due.",
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
         parameters: [
           {
@@ -205,7 +206,7 @@ export function buildOpenApiSpec(audience: Audience = "full") {
         tags: ["Mobile"],
         summary: "Register FCM device token",
         description:
-          "Identify the user from a Firebase Bearer token, **or** from `x-api-key` plus the `fcm_token` in the body. Do **not** send `x-user-id`. Admin/API-key calls also send a test reminder to that token.",
+          "Saves the FCM token only — does not send a notification. App: Firebase Bearer. Admin/Postman: `x-api-key` + body `fcm_token`. Do not send `x-user-id`.",
         security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -228,7 +229,7 @@ export function buildOpenApiSpec(audience: Audience = "full") {
         },
         responses: {
           200: {
-            description: "Token saved. API-key calls also include a reminder send result.",
+            description: "Token saved. No notification is sent.",
             content: {
               "application/json": {
                 schema: envelope({
@@ -236,15 +237,6 @@ export function buildOpenApiSpec(audience: Audience = "full") {
                   properties: {
                     registered: { type: "boolean", example: true },
                     userId: { type: "string" },
-                    reminder: {
-                      type: "object",
-                      properties: {
-                        successCount: { type: "integer" },
-                        failureCount: { type: "integer" },
-                        status: { type: "string", enum: ["delivered", "partial", "failed", "skipped"] },
-                        error: { type: "string" },
-                      },
-                    },
                   },
                 }),
               },

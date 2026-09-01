@@ -2,8 +2,6 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { apiError, apiOk } from "@/lib/api-response";
 import { requireAdminOrApiKey } from "@/lib/auth/service";
-import { isFirebaseConfigured } from "@/lib/env";
-import { sendHabitPush } from "@/lib/fcm";
 import { getFirebaseUserId } from "@/lib/mobile-auth";
 import {
   registerDevice,
@@ -56,38 +54,7 @@ export async function POST(request: NextRequest) {
 
   const fcmToken = parsed.data.fcm_token;
   const userId = auth.via === "firebase" ? auth.userId : await resolveUserIdForFcmToken(fcmToken);
-  const registered = await registerDevice(userId, fcmToken, parsed.data.platform);
-
-  if (auth.via === "firebase") {
-    return apiOk(registered);
-  }
-
-  if (!isFirebaseConfigured()) {
-    return apiOk({
-      ...registered,
-      reminder: { status: "failed", error: "Firebase is not configured" },
-    });
-  }
-
-  const reminder = await sendHabitPush({
-    tokens: [fcmToken],
-    userId,
-    habitId: "device-register",
-    habitName: "Habit Reminder",
-    notificationBody: "Time for your habit",
-    scheduledTime: "now",
-    logDelivery: true,
-  });
-
-  return apiOk({
-    ...registered,
-    reminder: {
-      successCount: reminder.successCount,
-      failureCount: reminder.failureCount,
-      status: reminder.status,
-      error: reminder.error,
-    },
-  });
+  return apiOk(await registerDevice(userId, fcmToken, parsed.data.platform));
 }
 
 export async function DELETE(request: NextRequest) {

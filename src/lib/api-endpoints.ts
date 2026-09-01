@@ -16,10 +16,10 @@ export const PUBLIC_ENDPOINTS: EndpointRow[] = [
 ];
 
 export const MOBILE_ENDPOINTS: EndpointRow[] = [
-  { method: "POST", path: "/api/v1/habits/reminder", desc: "Create or replace one habit reminder", auth: "bearer", group: "Mobile v1" },
+  { method: "POST", path: "/api/v1/habits/reminder", desc: "Save one habit schedule. Does not send a push — cron does that at the due time.", auth: "bearer", group: "Mobile v1" },
   { method: "DELETE", path: "/api/v1/habits/reminder/:habitId", desc: "Delete a habit reminder", auth: "bearer", group: "Mobile v1" },
   { method: "POST", path: "/api/v1/habits/reminder/bulk", desc: "Bulk upsert reminders", auth: "bearer", group: "Mobile v1" },
-  { method: "POST", path: "/api/v1/devices", desc: "Register FCM token. Firebase Bearer, or x-api-key + { fcm_token }. API-key also sends a test reminder.", auth: "bearer-or-key", group: "Mobile v1" },
+  { method: "POST", path: "/api/v1/devices", desc: "Register FCM token only. Firebase Bearer, or x-api-key + { fcm_token }. Does not send a notification.", auth: "bearer-or-key", group: "Mobile v1" },
   { method: "DELETE", path: "/api/v1/devices", desc: "Unregister FCM token. Body: { fcm_token }", auth: "bearer-or-key", group: "Mobile v1" },
   { method: "GET", path: "/api/v1/habits/cron/reminder", desc: "Dispatch due reminders this minute", auth: "cron", group: "Cron" },
 ];
