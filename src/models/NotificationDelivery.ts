@@ -13,6 +13,7 @@ const NotificationDeliverySchema = new Schema(
       enum: ["delivered", "partial", "failed", "skipped"],
       required: true,
     },
+    skipReason: String,
   },
   { timestamps: true },
 );

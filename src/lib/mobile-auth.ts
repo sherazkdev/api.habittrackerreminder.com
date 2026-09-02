@@ -1,54 +1,44 @@
-import { getAuth } from "firebase-admin/auth";
 import type { NextRequest } from "next/server";
-import { getFirebaseAdmin } from "@/lib/firebase-admin";
-import { getApiKeyHeader, getBearerToken, requireAdminOrApiKey } from "@/lib/auth/service";
-import { isFirebaseConfigured } from "@/lib/env";
+import { getApiKeyHeader } from "@/lib/auth/service";
+import { verifyApiKey } from "@/lib/auth/api-keys";
+import { findUserByExactFcmToken } from "@/lib/device-registry";
+import { apiError } from "@/lib/api-response";
 
-export async function getFirebaseUserId(request: NextRequest): Promise<string | null> {
-  const token = getBearerToken(request);
-  if (!token || !isFirebaseConfigured()) return null;
-  try {
-    getFirebaseAdmin();
-    const decoded = await getAuth().verifyIdToken(token);
-    return decoded.uid ?? null;
-  } catch {
-    return null;
-  }
+export async function requireMobileApiKey(request: NextRequest) {
+  const apiKey = getApiKeyHeader(request);
+  if (!apiKey) return null;
+  return verifyApiKey(apiKey);
 }
 
-export async function resolveAppUser(request: NextRequest): Promise<
-  { ok: true; userId: string } | { ok: false; message: string }
-> {
-  const userIdHeader = request.headers.get("x-user-id")?.trim();
-  const apiKey = getApiKeyHeader(request);
-  const firebaseUid = await getFirebaseUserId(request);
+export type DeviceResolveOk = { ok: true; userId: string; fcmToken: string };
+export type DeviceResolveFail = { ok: false; status: number; code: string; message: string };
 
-  if (userIdHeader) {
-    const admin = await requireAdminOrApiKey(request);
-    if (admin) return { ok: true, userId: userIdHeader };
-    if (apiKey) return { ok: false, message: "Invalid x-api-key" };
-    return { ok: false, message: "x-user-id requires a valid x-api-key or admin Bearer token" };
+export async function resolveDeviceByFcmToken(
+  request: NextRequest,
+): Promise<DeviceResolveOk | DeviceResolveFail> {
+  const apiKeyOk = await requireMobileApiKey(request);
+  if (!apiKeyOk) {
+    return { ok: false, status: 401, code: "UNAUTHORIZED", message: "Valid x-api-key required" };
   }
 
-  if (firebaseUid) return { ok: true, userId: firebaseUid };
+  const fcmToken = request.headers.get("x-fcm-token")?.trim();
+  if (!fcmToken) {
+    return { ok: false, status: 400, code: "VALIDATION_ERROR", message: "x-fcm-token header is required" };
+  }
 
-  if (apiKey) {
-    const admin = await requireAdminOrApiKey(request);
-    if (!admin) return { ok: false, message: "Invalid x-api-key" };
+  const user = await findUserByExactFcmToken(fcmToken);
+  if (!user) {
     return {
       ok: false,
-      message:
-        "x-api-key is not enough. Also send header x-user-id with the user's Firebase uid (not the FCM token).",
+      status: 404,
+      code: "DEVICE_NOT_REGISTERED",
+      message: "FCM token is not registered. Call POST /api/v1/devices first.",
     };
   }
 
-  return {
-    ok: false,
-    message: "Firebase Bearer token required, or admin x-api-key plus x-user-id",
-  };
+  return { ok: true, userId: user.userId, fcmToken };
 }
 
-export async function resolveAppUserId(request: NextRequest): Promise<string | null> {
-  const result = await resolveAppUser(request);
-  return result.ok ? result.userId : null;
+export function deviceResolveError(result: DeviceResolveFail) {
+  return apiError(result.code, result.message, result.status);
 }

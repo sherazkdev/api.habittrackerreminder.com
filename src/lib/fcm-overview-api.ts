@@ -28,6 +28,7 @@ export type FcmRecentDeliveryRow = {
   gender: "male" | "female";
   tokenCount: number;
   status: "delivered" | "partial" | "failed" | "skipped";
+  skipReason?: string;
 };
 
 export type FcmActivityItem = {

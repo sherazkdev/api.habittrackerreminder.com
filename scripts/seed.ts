@@ -40,7 +40,7 @@ async function main() {
       for (const reminder of result.demo.reminders) {
         console.log(`  ${reminder.habitId}  →  ${reminder.scheduledTimes.join(", ")}`);
       }
-      console.log("Use x-user-id: seed-dev-user with admin Bearer or x-api-key to call the APIs.");
+      console.log("Demo reminders are seeded for dashboard data. Mobile APIs use x-api-key + x-fcm-token.");
     }
   } finally {
     await disconnectSeed();

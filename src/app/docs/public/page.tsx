@@ -5,7 +5,7 @@ export default function PublicDocsPage() {
     <SwaggerConsole
       specUrl="/api/v1/openapi.json?audience=public"
       title="Public & mobile API"
-      subtitle="Devices save the FCM token only (Firebase Bearer or x-api-key + fcm_token). Reminder POST saves the schedule — cron sends the push later."
+      subtitle="Devices: x-api-key + fcmToken. Reminders: x-api-key + x-fcm-token. Cron sends the push at the scheduled time."
     />
   );
 }

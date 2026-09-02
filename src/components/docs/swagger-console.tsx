@@ -98,7 +98,10 @@ export function SwaggerConsole({
             Authorize → x-api-key
           </span>
           <span className="rounded-full bg-[rgb(255_203_102/0.2)] px-2.5 py-1 text-[var(--text-secondary)]">
-            Devices → x-api-key + fcm_token
+            Authorize → x-fcm-token
+          </span>
+          <span className="rounded-full bg-[rgb(255_203_102/0.14)] px-2.5 py-1 text-[var(--text-secondary)]">
+            Devices: x-api-key + body fcmToken · Reminders: both headers
           </span>
         </div>
       </header>

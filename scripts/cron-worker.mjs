@@ -25,7 +25,7 @@ applyEnvFile(".env", false);
 applyEnvFile(".env.production", true);
 applyEnvFile(".env.local", true);
 
-const base = (process.env.CRON_INTERNAL_URL ?? `http://127.0.0.1:${process.env.PORT ?? "3000"}`).replace(
+const base = (process.env.CRON_INTERNAL_URL ?? `http://127.0.0.1:${process.env.PORT ?? "3012"}`).replace(
   /\/$/,
   "",
 );

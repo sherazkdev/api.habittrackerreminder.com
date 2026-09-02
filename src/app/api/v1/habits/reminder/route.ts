@@ -1,12 +1,11 @@
 import { NextRequest } from "next/server";
 import { apiError, apiOkFields } from "@/lib/api-response";
-import { resolveAppUser } from "@/lib/mobile-auth";
+import { deviceResolveError, resolveDeviceByFcmToken } from "@/lib/mobile-auth";
 import { parseReminderPayload, upsertReminder } from "@/lib/reminders";
 
 export async function POST(request: NextRequest) {
-  const auth = await resolveAppUser(request);
-  if (!auth.ok) return apiError("UNAUTHORIZED", auth.message, 401);
-  const userId = auth.userId;
+  const device = await resolveDeviceByFcmToken(request);
+  if (!device.ok) return deviceResolveError(device);
 
   let body: unknown;
   try {
@@ -20,7 +19,7 @@ export async function POST(request: NextRequest) {
     return apiError("VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "Invalid reminder payload", 400);
   }
 
-  const result = await upsertReminder(userId, parsed.data);
+  const result = await upsertReminder(device.userId, parsed.data);
   return apiOkFields(result);
 }
 

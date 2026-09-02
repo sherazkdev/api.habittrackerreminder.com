@@ -1,14 +1,13 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { apiError, apiOkFields } from "@/lib/api-response";
-import { resolveAppUser } from "@/lib/mobile-auth";
+import { deviceResolveError, resolveDeviceByFcmToken } from "@/lib/mobile-auth";
 import { bulkUpsertReminders, parseReminderPayload } from "@/lib/reminders";
 import { reminderPayloadSchema } from "@/lib/reminder-validation";
 
 export async function POST(request: NextRequest) {
-  const auth = await resolveAppUser(request);
-  if (!auth.ok) return apiError("UNAUTHORIZED", auth.message, 401);
-  const userId = auth.userId;
+  const device = await resolveDeviceByFcmToken(request);
+  if (!device.ok) return deviceResolveError(device);
 
   let body: unknown;
   try {
@@ -26,7 +25,7 @@ export async function POST(request: NextRequest) {
     return apiError("VALIDATION_ERROR", message ?? "Body must be a non-empty array of reminders", 400);
   }
 
-  const results = await bulkUpsertReminders(userId, parsed.data);
+  const results = await bulkUpsertReminders(device.userId, parsed.data);
   return apiOkFields({
     results: results.map((item) => ({ success: true, ...item })),
   });

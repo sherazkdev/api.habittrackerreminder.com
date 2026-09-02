@@ -11,13 +11,19 @@ const securitySchemes = {
     type: "http",
     scheme: "bearer",
     bearerFormat: "JWT",
-    description: "Admin access token from POST /api/admin/login, or Firebase ID token for mobile routes.",
+    description: "Admin access token from POST /api/admin/login.",
   },
   apiKeyAuth: {
     type: "apiKey",
     in: "header",
     name: "x-api-key",
-    description: "Admin API key created in Settings → API Keys. Shown once at creation.",
+    description: "API key created in Settings → API Keys. Required for mobile device and reminder routes.",
+  },
+  fcmTokenAuth: {
+    type: "apiKey",
+    in: "header",
+    name: "x-fcm-token",
+    description: "Current phone FCM token. Register it first with POST /api/v1/devices.",
   },
   cronSecret: {
     type: "http",
@@ -30,8 +36,8 @@ const reminderSchema = {
   type: "object",
   required: ["habitId", "habitName", "notificationBody", "days", "timer", "repeat"],
   properties: {
-    habitId: { type: "string", example: "abc123" },
-    habitName: { type: "string", example: "Drink Water" },
+    habitId: { type: "string", example: "habit_001" },
+    habitName: { type: "string", example: "Morning Walk" },
     notificationBody: { type: "string", example: "Time for your habit" },
     days: {
       type: "array",
@@ -43,10 +49,53 @@ const reminderSchema = {
     },
     timer: { type: "boolean", example: true },
     repeat: { type: "boolean", example: false },
-    time: { type: "string", example: "08:00" },
+    time: { type: "string", example: "16:30" },
     startTime: { type: "string", example: "09:00" },
     endTime: { type: "string", example: "21:00" },
     repeatCount: { type: "integer", example: 4 },
+  },
+};
+
+const reminderExample = {
+  habitId: "habit_001",
+  habitName: "Morning Walk",
+  notificationBody: "Time for your habit",
+  days: ["Everyday"],
+  timer: true,
+  repeat: false,
+  time: "16:30",
+};
+
+const reminderRepeatExample = {
+  habitId: "stretch-1",
+  habitName: "Stretch",
+  notificationBody: "Time for your habit",
+  days: ["Monday", "Wednesday", "Friday"],
+  timer: false,
+  repeat: true,
+  startTime: "09:00",
+  endTime: "21:00",
+  repeatCount: 4,
+};
+
+const fcmTokenHeader = {
+  name: "x-fcm-token",
+  in: "header",
+  required: true,
+  schema: { type: "string" },
+  description: "Current registered phone FCM token. Same value sent to POST /api/v1/devices.",
+};
+
+const reminderRequestBody = {
+  required: true,
+  content: {
+    "application/json": {
+      schema: reminderSchema,
+      examples: {
+        timer: { summary: "Fixed time", value: reminderExample },
+        repeat: { summary: "Repeat interval", value: reminderRepeatExample },
+      },
+    },
   },
 };
 
@@ -106,27 +155,18 @@ export function buildOpenApiSpec(audience: Audience = "full") {
         tags: ["Mobile"],
         summary: "Create or replace one habit reminder",
         description:
-          "Saves or replaces the habit schedule only — does not send a notification. Firebase Bearer, or admin `x-api-key` plus `x-user-id`. The cron worker sends the push when the scheduled time is due.",
-        security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
-        parameters: [
-          {
-            name: "x-user-id",
-            in: "header",
-            required: false,
-            schema: { type: "string" },
-            description: "Required when calling with admin auth instead of a Firebase token.",
-          },
-        ],
-        requestBody: {
-          required: true,
-          content: { "application/json": { schema: reminderSchema } },
-        },
+          "Saves the schedule only — cron sends the push at the due time. Headers: `x-api-key` + `x-fcm-token` (the registered phone token). Do not send `x-user-id` or Firebase Bearer.",
+        security: [{ apiKeyAuth: [], fcmTokenAuth: [] }],
+        parameters: [fcmTokenHeader],
+        requestBody: reminderRequestBody,
         responses: {
           200: {
             description: "Upserted. Spec shape: success, habitId, scheduledTimes.",
             content: { "application/json": { schema: envelope({ type: "object" }) } },
           },
-          401: { description: "Unauthorized" },
+          400: { description: "Missing x-fcm-token or invalid body" },
+          401: { description: "Invalid or missing x-api-key" },
+          404: { description: "DEVICE_NOT_REGISTERED" },
         },
       },
     },
@@ -134,43 +174,33 @@ export function buildOpenApiSpec(audience: Audience = "full") {
       post: {
         tags: ["Mobile"],
         summary: "Create or replace one habit reminder (spec path)",
-        description: "Alias of POST /api/v1/habits/reminder for the Flutter spec.",
-        security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
-        parameters: [
-          {
-            name: "x-user-id",
-            in: "header",
-            required: false,
-            schema: { type: "string" },
-          },
-        ],
-        requestBody: {
-          required: true,
-          content: { "application/json": { schema: reminderSchema } },
-        },
-        responses: { 200: { description: "Upserted" }, 401: { description: "Unauthorized" } },
+        description: "Alias of POST /api/v1/habits/reminder.",
+        security: [{ apiKeyAuth: [], fcmTokenAuth: [] }],
+        parameters: [fcmTokenHeader],
+        requestBody: reminderRequestBody,
+        responses: { 200: { description: "Upserted" }, 404: { description: "DEVICE_NOT_REGISTERED" } },
       },
     },
     "/api/v1/habits/reminder/{habitId}": {
       delete: {
         tags: ["Mobile"],
         summary: "Delete a habit reminder",
-        security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
+        security: [{ apiKeyAuth: [], fcmTokenAuth: [] }],
         parameters: [
           { name: "habitId", in: "path", required: true, schema: { type: "string" } },
-          { name: "x-user-id", in: "header", required: false, schema: { type: "string" } },
+          fcmTokenHeader,
         ],
-        responses: { 200: { description: "Deleted" }, 404: { description: "Not found" } },
+        responses: { 200: { description: "Deleted" }, 404: { description: "Not found or device not registered" } },
       },
     },
     "/api/habits/reminder/{habitId}": {
       delete: {
         tags: ["Mobile"],
         summary: "Delete a habit reminder (spec path)",
-        security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
+        security: [{ apiKeyAuth: [], fcmTokenAuth: [] }],
         parameters: [
           { name: "habitId", in: "path", required: true, schema: { type: "string" } },
-          { name: "x-user-id", in: "header", required: false, schema: { type: "string" } },
+          fcmTokenHeader,
         ],
         responses: { 200: { description: "Deleted" }, 404: { description: "Not found" } },
       },
@@ -179,24 +209,34 @@ export function buildOpenApiSpec(audience: Audience = "full") {
       post: {
         tags: ["Mobile"],
         summary: "Bulk upsert reminders",
-        security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
-        parameters: [{ name: "x-user-id", in: "header", required: false, schema: { type: "string" } }],
+        security: [{ apiKeyAuth: [], fcmTokenAuth: [] }],
+        parameters: [fcmTokenHeader],
         requestBody: {
           required: true,
-          content: { "application/json": { schema: { type: "array", items: reminderSchema } } },
+          content: {
+            "application/json": {
+              schema: { type: "array", items: reminderSchema },
+              example: [reminderExample, reminderRepeatExample],
+            },
+          },
         },
-        responses: { 200: { description: "Upserted" } },
+        responses: { 200: { description: "Upserted" }, 404: { description: "DEVICE_NOT_REGISTERED" } },
       },
     },
     "/api/habits/reminder/bulk": {
       post: {
         tags: ["Mobile"],
         summary: "Bulk upsert reminders (spec path)",
-        security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
-        parameters: [{ name: "x-user-id", in: "header", required: false, schema: { type: "string" } }],
+        security: [{ apiKeyAuth: [], fcmTokenAuth: [] }],
+        parameters: [fcmTokenHeader],
         requestBody: {
           required: true,
-          content: { "application/json": { schema: { type: "array", items: reminderSchema } } },
+          content: {
+            "application/json": {
+              schema: { type: "array", items: reminderSchema },
+              example: [reminderExample, reminderRepeatExample],
+            },
+          },
         },
         responses: { 200: { description: "Upserted" } },
       },
@@ -204,24 +244,36 @@ export function buildOpenApiSpec(audience: Audience = "full") {
     "/api/v1/devices": {
       post: {
         tags: ["Mobile"],
-        summary: "Register FCM device token",
+        summary: "Register or refresh FCM device token",
         description:
-          "Saves the FCM token only — does not send a notification. App: Firebase Bearer. Admin/Postman: `x-api-key` + body `fcm_token`. Do not send `x-user-id`.",
-        security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
+          "Saves the FCM token only — does not send a notification. Header: `x-api-key`. Body: `fcmToken` or `fcm_token`. Optional `previousFcmToken` / `previous_fcm_token` replaces an old token on the same device record. Do not send `x-user-id`.",
+        security: [{ apiKeyAuth: [] }],
         requestBody: {
           required: true,
           content: {
             "application/json": {
               schema: {
                 type: "object",
-                required: ["fcm_token"],
                 properties: {
-                  fcm_token: {
-                    type: "string",
-                    description: "FCM registration token from the phone. Used to find or create the user when calling with x-api-key.",
-                    example: "dXyz...:APA91b...",
-                  },
+                  fcmToken: { type: "string", example: "dXyz...:APA91b..." },
+                  fcm_token: { type: "string", description: "Snake_case alias of fcmToken" },
+                  previousFcmToken: { type: "string", description: "Old token when Firebase refreshes the FCM token" },
+                  previous_fcm_token: { type: "string" },
                   platform: { type: "string", enum: ["android", "ios"], example: "android" },
+                },
+              },
+              examples: {
+                register: {
+                  summary: "Register current token",
+                  value: { fcmToken: "dXyz...:APA91b...", platform: "android" },
+                },
+                refresh: {
+                  summary: "Refresh after Firebase rotates the token",
+                  value: {
+                    fcmToken: "NEW_TOKEN",
+                    previousFcmToken: "OLD_TOKEN",
+                    platform: "android",
+                  },
                 },
               },
             },
@@ -234,30 +286,31 @@ export function buildOpenApiSpec(audience: Audience = "full") {
               "application/json": {
                 schema: envelope({
                   type: "object",
-                  properties: {
-                    registered: { type: "boolean", example: true },
-                    userId: { type: "string" },
-                  },
+                  properties: { registered: { type: "boolean", example: true } },
                 }),
               },
             },
           },
-          401: { description: "Missing Firebase Bearer or x-api-key" },
+          401: { description: "Missing or invalid x-api-key" },
+          404: { description: "PREVIOUS_DEVICE_TOKEN_NOT_FOUND" },
+          409: { description: "FCM_TOKEN_CONFLICT" },
         },
       },
       delete: {
         tags: ["Mobile"],
         summary: "Unregister FCM device token",
-        description: "Firebase Bearer, or x-api-key + body fcm_token. No x-user-id header.",
-        security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
+        description: "`x-api-key` + body `fcmToken` or `fcm_token`.",
+        security: [{ apiKeyAuth: [] }],
         requestBody: {
           required: true,
           content: {
             "application/json": {
               schema: {
                 type: "object",
-                required: ["fcm_token"],
-                properties: { fcm_token: { type: "string" } },
+                properties: {
+                  fcmToken: { type: "string" },
+                  fcm_token: { type: "string" },
+                },
               },
             },
           },
@@ -467,14 +520,14 @@ export function buildOpenApiSpec(audience: Audience = "full") {
       version: env.appVersion(),
       description:
         audience === "public"
-          ? "Mobile APIs. **Reminders:** Firebase ID token (Bearer), or admin `x-api-key` plus `x-user-id`. **Devices:** Firebase Bearer, or `x-api-key` plus body `fcm_token` — no `x-user-id`."
-          : "Use **Authorize** for Bearer JWT (`POST /api/admin/login`) or `x-api-key` (Settings → API Keys). Admin analytics accept both. **Devices** (`POST /api/v1/devices`): Firebase Bearer **or** `x-api-key` + `{ fcm_token }` — do not send `x-user-id`. Reminder write routes still need a Firebase token, or `x-api-key` + `x-user-id`.",
+          ? "Mobile APIs. **Devices:** `x-api-key` + body `fcmToken`. **Reminders:** `x-api-key` + `x-fcm-token`. No Firebase Bearer and no `x-user-id`."
+          : "Admin: Bearer JWT from `POST /api/admin/login`, or `x-api-key`. **Mobile devices:** `x-api-key` + `{ fcmToken }`. **Mobile reminders:** `x-api-key` + `x-fcm-token`. Do not send `x-user-id` or a Firebase ID token.",
     },
     servers: servers(),
     tags: [
       { name: "Platform", description: "Health and readiness" },
       { name: "Public", description: "Discovery and OpenAPI" },
-      { name: "Mobile", description: "Flutter app. Devices: Firebase Bearer or x-api-key + fcm_token. Reminders: Firebase Bearer or x-api-key + x-user-id." },
+      { name: "Mobile", description: "Flutter app. Devices: x-api-key + fcmToken. Reminders: x-api-key + x-fcm-token." },
       { name: "Cron", description: "Scheduler" },
       { name: "Admin auth", description: "Admin login and password" },
       { name: "API keys", description: "x-api-key management (Bearer only)" },

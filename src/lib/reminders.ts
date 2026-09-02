@@ -1,10 +1,10 @@
-import { createHash } from "crypto";
 import { Reminder } from "@/models/Reminder";
 import { User } from "@/models/User";
 import { NotificationDelivery } from "@/models/NotificationDelivery";
 import { connectDB } from "@/lib/db";
 import { computeScheduledTimes, currentClock, dueReminderFilter } from "@/lib/schedule";
 import { reminderPayloadSchema, type ReminderPayload } from "@/lib/reminder-validation";
+import { tokensForDeviceRecord } from "@/lib/device-tokens";
 import { removeDeadTokens, sendHabitPush } from "@/lib/fcm";
 import { env } from "@/lib/env";
 
@@ -57,6 +57,11 @@ export async function getDueReminders(now = new Date()) {
   return Reminder.find(dueReminderFilter(clock)).lean();
 }
 
+async function tokensOnDeviceRecord(userId: string): Promise<string[]> {
+  const user = await User.findOne({ userId }).lean();
+  return user?.fcmTokens?.filter(Boolean) ?? [];
+}
+
 export async function dispatchDueReminders() {
   await connectDB();
   const clock = currentClock(env.reminderTimezone());
@@ -67,8 +72,8 @@ export async function dispatchDueReminders() {
   let skipped = 0;
 
   for (const reminder of due) {
-    const user = await User.findOne({ userId: reminder.userId }).lean();
-    const tokens = user?.fcmTokens?.filter(Boolean) ?? [];
+    const resolved = tokensForDeviceRecord(await tokensOnDeviceRecord(reminder.userId));
+    const tokens = resolved.tokens;
     if (tokens.length === 0) {
       skipped += 1;
       await NotificationDelivery.create({
@@ -79,6 +84,7 @@ export async function dispatchDueReminders() {
         scheduledTime: clock.time,
         tokenCount: 0,
         status: "skipped",
+        skipReason: resolved.skipReason,
       });
       continue;
     }
@@ -119,78 +125,4 @@ export async function dispatchDueReminders() {
     failed,
     skipped,
   };
-}
-
-export async function registerDevice(
-  userId: string,
-  fcmToken: string,
-  platform?: "android" | "ios",
-) {
-  await connectDB();
-  const now = new Date();
-  const user = await User.findOneAndUpdate(
-    { userId },
-    { $addToSet: { fcmTokens: fcmToken } },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
-  );
-
-  const hasMeta = Boolean(user.deviceMeta?.some((item: { token: string }) => item.token === fcmToken));
-  if (hasMeta) {
-    await User.updateOne(
-      { userId, "deviceMeta.token": fcmToken },
-      {
-        $set: {
-          "deviceMeta.$.lastSeenAt": now,
-          ...(platform ? { "deviceMeta.$.platform": platform } : {}),
-        },
-      },
-    );
-  } else {
-    await User.updateOne(
-      { userId },
-      {
-        $push: {
-          deviceMeta: {
-            token: fcmToken,
-            ...(platform ? { platform } : {}),
-            lastSeenAt: now,
-            createdAt: now,
-          },
-        },
-      },
-    );
-  }
-  return { registered: true, userId };
-}
-
-export async function unregisterDevice(userId: string, fcmToken: string) {
-  await connectDB();
-  await User.updateOne(
-    { userId },
-    { $pull: { fcmTokens: fcmToken, deviceMeta: { token: fcmToken } } },
-  );
-  return { unregistered: true, userId };
-}
-
-export async function findUserIdByFcmToken(fcmToken: string): Promise<string | null> {
-  await connectDB();
-  const user = await User.findOne({ fcmTokens: fcmToken }).lean();
-  return user?.userId ?? null;
-}
-
-export function userIdFromFcmToken(fcmToken: string) {
-  return `fcm-${createHash("sha256").update(fcmToken).digest("hex").slice(0, 24)}`;
-}
-
-export async function resolveUserIdForFcmToken(fcmToken: string): Promise<string> {
-  return (await findUserIdByFcmToken(fcmToken)) ?? userIdFromFcmToken(fcmToken);
-}
-
-export async function unregisterDeviceByToken(fcmToken: string) {
-  await connectDB();
-  const result = await User.updateMany(
-    { fcmTokens: fcmToken },
-    { $pull: { fcmTokens: fcmToken, deviceMeta: { token: fcmToken } } },
-  );
-  return { unregistered: result.modifiedCount > 0, fcmToken };
 }

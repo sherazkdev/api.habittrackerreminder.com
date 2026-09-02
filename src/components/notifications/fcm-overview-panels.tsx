@@ -228,6 +228,7 @@ export function FcmRecentDeliveriesTable({
     notification: string;
     tokenCount: number;
     status: "delivered" | "partial" | "failed" | "skipped";
+    skipReason?: string;
   }>;
   shortUid: (uid: string) => string;
   formatTime: (value: string) => string;
@@ -250,6 +251,7 @@ export function FcmRecentDeliveriesTable({
             <th className="px-4 py-3 font-medium">Notification</th>
             <th className="hidden px-4 py-3 font-medium md:table-cell">Tokens</th>
             <th className="px-4 py-3 font-medium">Status</th>
+            <th className="hidden px-4 py-3 font-medium lg:table-cell">Reason</th>
           </tr>
         </thead>
         <tbody>
@@ -265,6 +267,11 @@ export function FcmRecentDeliveriesTable({
               <td className="hidden px-4 py-3 md:table-cell">{row.tokenCount}</td>
               <td className="px-4 py-3">
                 <DeliveryStatusBadge status={row.status} />
+              </td>
+              <td className="hidden max-w-[280px] px-4 py-3 text-[12px] text-[var(--text-muted)] lg:table-cell">
+                {row.status === "skipped"
+                  ? row.skipReason || "No FCM token on this user"
+                  : "—"}
               </td>
             </tr>
           ))}

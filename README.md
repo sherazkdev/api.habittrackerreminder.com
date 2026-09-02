@@ -20,6 +20,8 @@ npm run dev
 - Home: http://localhost:3000
 - Admin: http://localhost:3000/admin/login (`ADMIN_SEED_EMAIL` / `ADMIN_SEED_PASSWORD`)
 - Swagger: http://localhost:3000/docs
+- Public / mobile Swagger: http://localhost:3000/docs/public
+- Endpoint list: [MOBILE_API.md](./MOBILE_API.md)
 
 `npm run seed` creates the first admin (if missing) and the spec demo habits for user `seed-dev-user`. Use `--reset-admin` to reset the admin password, or `--no-demo` to skip sample reminders.
 
@@ -29,9 +31,34 @@ Mobile reminder routes also exist at the spec paths (`/api/habits/reminder`, `/a
 
 - Admin dashboard: Bearer JWT from `POST /api/admin/login`
 - Admin APIs: Bearer JWT **or** `x-api-key`
-- Devices (`POST /api/v1/devices`): Firebase ID token, or `x-api-key` plus body `fcm_token` (no `x-user-id`)
-- Other mobile reminder APIs: Firebase ID token, or admin auth plus `x-user-id`
+- Devices (`POST /api/v1/devices`): `x-api-key` plus body `fcmToken` / `fcm_token`. Optional `previousFcmToken` on refresh. Does not send a push.
+- Reminders: `x-api-key` plus `x-fcm-token` (the registered phone token). No `x-user-id`, no Firebase ID token.
 - Cron: `Authorization: Bearer <CRON_SECRET>` or `x-cron-secret`
+
+## Mobile sequence
+
+```bash
+# 1. Register the phone token
+curl -X POST https://habittrackerapi.com/api/v1/devices \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"fcmToken":"PHONE_FCM_TOKEN","platform":"android"}'
+
+# 2. Create a reminder for that same token
+curl -X POST https://habittrackerapi.com/api/v1/habits/reminder \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "x-fcm-token: PHONE_FCM_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"habitId":"habit_001","habitName":"Morning Walk","notificationBody":"Time for your habit","days":["Everyday"],"timer":true,"repeat":false,"time":"16:30"}'
+
+# 3. After Firebase refreshes the FCM token
+curl -X POST https://habittrackerapi.com/api/v1/devices \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"fcmToken":"NEW_FCM_TOKEN","previousFcmToken":"OLD_FCM_TOKEN","platform":"android"}'
+```
+
+Cron then sends to the current token on that device record. The app does not store a generated `fcm-*` user ID.
 
 ## Deploy on Contabo VPS
 

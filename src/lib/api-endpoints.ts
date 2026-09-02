@@ -2,7 +2,7 @@ export type EndpointRow = {
   method: string;
   path: string;
   desc: string;
-  auth?: "none" | "public" | "bearer" | "bearer-or-key" | "bearer-only" | "cron";
+  auth?: "none" | "public" | "bearer" | "bearer-or-key" | "bearer-only" | "api-key" | "api-key-and-fcm" | "cron";
   group: string;
 };
 
@@ -16,11 +16,11 @@ export const PUBLIC_ENDPOINTS: EndpointRow[] = [
 ];
 
 export const MOBILE_ENDPOINTS: EndpointRow[] = [
-  { method: "POST", path: "/api/v1/habits/reminder", desc: "Save one habit schedule. Does not send a push — cron does that at the due time.", auth: "bearer", group: "Mobile v1" },
-  { method: "DELETE", path: "/api/v1/habits/reminder/:habitId", desc: "Delete a habit reminder", auth: "bearer", group: "Mobile v1" },
-  { method: "POST", path: "/api/v1/habits/reminder/bulk", desc: "Bulk upsert reminders", auth: "bearer", group: "Mobile v1" },
-  { method: "POST", path: "/api/v1/devices", desc: "Register FCM token only. Firebase Bearer, or x-api-key + { fcm_token }. Does not send a notification.", auth: "bearer-or-key", group: "Mobile v1" },
-  { method: "DELETE", path: "/api/v1/devices", desc: "Unregister FCM token. Body: { fcm_token }", auth: "bearer-or-key", group: "Mobile v1" },
+  { method: "POST", path: "/api/v1/habits/reminder", desc: "Save one habit schedule. x-api-key + x-fcm-token. Cron sends the push at the due time.", auth: "api-key-and-fcm", group: "Mobile v1" },
+  { method: "DELETE", path: "/api/v1/habits/reminder/:habitId", desc: "Delete a habit reminder. x-api-key + x-fcm-token.", auth: "api-key-and-fcm", group: "Mobile v1" },
+  { method: "POST", path: "/api/v1/habits/reminder/bulk", desc: "Bulk upsert reminders. x-api-key + x-fcm-token.", auth: "api-key-and-fcm", group: "Mobile v1" },
+  { method: "POST", path: "/api/v1/devices", desc: "Register or refresh FCM token. x-api-key + { fcmToken }. Does not send a notification.", auth: "api-key", group: "Mobile v1" },
+  { method: "DELETE", path: "/api/v1/devices", desc: "Unregister FCM token. x-api-key + { fcmToken }", auth: "api-key", group: "Mobile v1" },
   { method: "GET", path: "/api/v1/habits/cron/reminder", desc: "Dispatch due reminders this minute", auth: "cron", group: "Cron" },
 ];
 
@@ -49,14 +49,21 @@ export const ADMIN_CONTENT_ENDPOINTS: EndpointRow[] = [
 
 export const ALL_ENDPOINT_GROUPS = [
   { id: "public", title: "Platform & docs", rows: PUBLIC_ENDPOINTS },
-  { id: "mobile", title: "Mobile reminders (Firebase)", rows: MOBILE_ENDPOINTS },
+  { id: "mobile", title: "Mobile reminders (FCM token)", rows: MOBILE_ENDPOINTS },
   { id: "auth", title: "Admin authentication", rows: ADMIN_AUTH_ENDPOINTS },
   { id: "keys", title: "API keys (x-api-key)", rows: ADMIN_API_KEY_ENDPOINTS },
   { id: "admin", title: "Admin analytics & FCM", rows: ADMIN_CONTENT_ENDPOINTS },
 ] as const;
 
 export function endpointRequiresCredential(row: EndpointRow): boolean {
-  return row.auth === "bearer" || row.auth === "bearer-or-key" || row.auth === "bearer-only" || row.auth === "cron";
+  return (
+    row.auth === "bearer" ||
+    row.auth === "bearer-or-key" ||
+    row.auth === "bearer-only" ||
+    row.auth === "api-key" ||
+    row.auth === "api-key-and-fcm" ||
+    row.auth === "cron"
+  );
 }
 
 export function authBadge(auth: EndpointRow["auth"]): { label: string; tone: "green" | "purple" | "muted" | "orange" } {
@@ -67,8 +74,12 @@ export function authBadge(auth: EndpointRow["auth"]): { label: string; tone: "gr
       return { label: "Bearer JWT only", tone: "orange" };
     case "public":
       return { label: "Public", tone: "green" };
+    case "api-key":
+      return { label: "x-api-key", tone: "purple" };
+    case "api-key-and-fcm":
+      return { label: "x-api-key + x-fcm-token", tone: "purple" };
     case "bearer":
-      return { label: "Firebase Bearer", tone: "orange" };
+      return { label: "Bearer JWT", tone: "orange" };
     case "cron":
       return { label: "Cron secret", tone: "orange" };
     case "none":

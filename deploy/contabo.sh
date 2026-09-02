@@ -54,7 +54,7 @@ pm2 save
 pm2 startup systemd -u root --hp /root | tail -n 1 | bash || true
 
 echo
-echo "App is on 127.0.0.1:3000 behind Nginx."
+echo "App is on 127.0.0.1:3012 behind Nginx."
 echo "Point ${DOMAIN} A-record to this VPS, then:"
 echo "  apt-get install -y certbot python3-certbot-nginx"
 echo "  certbot --nginx -d ${DOMAIN}"
