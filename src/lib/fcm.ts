@@ -54,11 +54,12 @@ export async function sendHabitPush(input: {
     try {
       await messaging.send({
         token,
-        notification: {
-          title: input.habitName,
-          body: input.notificationBody,
+        data: {
+          type: "habit_reminder",
+          habitId: input.habitId,
+          habitName: input.habitName,
+          notificationBody: input.notificationBody,
         },
-        data: { habitId: input.habitId },
         android: { priority: "high" },
       });
       successCount += 1;
