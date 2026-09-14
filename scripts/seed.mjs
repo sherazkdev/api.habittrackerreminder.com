@@ -113,7 +113,7 @@ async function upsertReminder(userId, payload) {
   const doc = await Reminder.findOneAndUpdate(
     { userId, habitId: payload.habitId },
     { ...payload, userId, scheduledTimes },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
+    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
   );
   return { habitId: doc.habitId, scheduledTimes: doc.scheduledTimes };
 }

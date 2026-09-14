@@ -16,7 +16,7 @@ export async function registerDevice(
   const user = await User.findOneAndUpdate(
     { userId },
     { $addToSet: { fcmTokens: fcmToken } },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
+    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
   );
 
   const hasMeta = Boolean(user.deviceMeta?.some((item: { token: string }) => item.token === fcmToken));

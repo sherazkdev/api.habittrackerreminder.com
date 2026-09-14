@@ -27,7 +27,7 @@ export async function upsertReminder(userId: string, payload: ReminderPayload) {
       repeatCount: payload.repeatCount,
       scheduledTimes,
     },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
+    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
   );
   return { habitId: doc.habitId, scheduledTimes: doc.scheduledTimes };
 }

@@ -39,6 +39,13 @@ if [ ! -f .env.local ]; then
   exit 0
 fi
 
+# Never `pm2 stop all` — this VPS runs many unrelated apps.
+for name in habit-reminder-api habit-reminder-cron habit-api habit-cron; do
+  if command -v pm2 >/dev/null 2>&1 && pm2 describe "$name" >/dev/null 2>&1; then
+    pm2 stop "$name" || true
+  fi
+done
+
 npm ci
 npm run build
 
@@ -49,6 +56,11 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl reload nginx
 
+for name in habit-reminder-api habit-reminder-cron habit-api habit-cron; do
+  if pm2 describe "$name" >/dev/null 2>&1; then
+    pm2 delete "$name" || true
+  fi
+done
 pm2 start ecosystem.config.cjs
 pm2 save
 pm2 startup systemd -u root --hp /root | tail -n 1 | bash || true
@@ -58,4 +70,4 @@ echo "App is on 127.0.0.1:3012 behind Nginx."
 echo "Point ${DOMAIN} A-record to this VPS, then:"
 echo "  apt-get install -y certbot python3-certbot-nginx"
 echo "  certbot --nginx -d ${DOMAIN}"
-echo "Set API_PUBLIC_URL=https://${DOMAIN} and COOKIE_SECURE=true in .env.local, then: pm2 restart all"
+echo "Set API_PUBLIC_URL=https://${DOMAIN} and COOKIE_SECURE=true in .env.local, then: pm2 restart habit-reminder-api habit-reminder-cron"

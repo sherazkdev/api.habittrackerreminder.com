@@ -2,29 +2,37 @@
 const APP_PORT = "3012";
 const LOOPBACK = `http://127.0.0.1:${APP_PORT}`;
 
+const restartGuard = {
+  instances: 1,
+  exec_mode: "fork",
+  autorestart: true,
+  min_uptime: "10s",
+  max_restarts: 20,
+  exp_backoff_restart_delay: 1000,
+  kill_timeout: 8000,
+  env_file: ".env.local",
+};
+
 module.exports = {
   apps: [
     {
-      name: "habit-api",
+      name: "habit-reminder-api",
       cwd: __dirname,
-      script: "node_modules/next/dist/bin/next",
-      args: `start -H 127.0.0.1 -p ${APP_PORT}`,
-      instances: 1,
-      exec_mode: "fork",
-      env_file: ".env.local",
+      script: "scripts/start-api.mjs",
+      interpreter: "node",
+      ...restartGuard,
       env: {
         NODE_ENV: "production",
+        HOST: "127.0.0.1",
         PORT: APP_PORT,
       },
     },
     {
-      name: "habit-cron",
+      name: "habit-reminder-cron",
       cwd: __dirname,
       script: "scripts/cron-worker.mjs",
       interpreter: "node",
-      instances: 1,
-      exec_mode: "fork",
-      env_file: ".env.local",
+      ...restartGuard,
       env: {
         NODE_ENV: "production",
         PORT: APP_PORT,

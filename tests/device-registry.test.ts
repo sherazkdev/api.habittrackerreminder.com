@@ -47,7 +47,7 @@ describe("registerOrRefreshDevice", () => {
     expect(findOneAndUpdate).toHaveBeenCalledWith(
       { userId: userIdFromFcmToken("new-token") },
       { $addToSet: { fcmTokens: "new-token" } },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
     );
   });
 
@@ -58,7 +58,7 @@ describe("registerOrRefreshDevice", () => {
     expect(findOneAndUpdate).toHaveBeenCalledWith(
       { userId: "existing-device" },
       { $addToSet: { fcmTokens: "same-token" } },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
     );
   });
 
@@ -77,7 +77,7 @@ describe("registerOrRefreshDevice", () => {
     expect(findOneAndUpdate).toHaveBeenCalledWith(
       { userId: "device-1" },
       { $addToSet: { fcmTokens: "new-token" } },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
     );
   });
 
