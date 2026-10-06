@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const reminderFind = vi.fn();
+const reminderDistinct = vi.fn();
 const userFindOne = vi.fn();
 const deliveryCreate = vi.fn();
 const sendHabitPush = vi.fn();
@@ -15,20 +16,29 @@ vi.mock("@/lib/schedule", async (importOriginal) => {
   return {
     ...actual,
     currentClock: () => ({ day: "Tuesday", time: "16:30" }),
-    dueReminderFilter: (clock: { day: string; time: string }) => ({
+    dueReminderFilter: (clock: { day: string; time: string }, timeZone: string) => ({
       scheduledTimes: clock.time,
+      timeZone,
       $or: [{ days: "Everyday" }, { days: clock.day }],
     }),
   };
 });
 vi.mock("@/models/Reminder", () => ({
-  Reminder: { find: (...args: unknown[]) => reminderFind(...args) },
+  Reminder: {
+    find: (...args: unknown[]) => reminderFind(...args),
+    distinct: (...args: unknown[]) => reminderDistinct(...args),
+  },
 }));
 vi.mock("@/models/User", () => ({
   User: { findOne: (...args: unknown[]) => userFindOne(...args) },
 }));
+const deliveryFindOne = vi.fn();
+
 vi.mock("@/models/NotificationDelivery", () => ({
-  NotificationDelivery: { create: (...args: unknown[]) => deliveryCreate(...args) },
+  NotificationDelivery: {
+    create: (...args: unknown[]) => deliveryCreate(...args),
+    findOne: (...args: unknown[]) => deliveryFindOne(...args),
+  },
 }));
 vi.mock("@/lib/fcm", () => ({
   sendHabitPush: (...args: unknown[]) => sendHabitPush(...args),
@@ -40,11 +50,15 @@ import { dispatchDueReminders } from "@/lib/reminders";
 describe("dispatchDueReminders", () => {
   beforeEach(() => {
     reminderFind.mockReset();
+    reminderDistinct.mockReset();
     userFindOne.mockReset();
     deliveryCreate.mockReset();
+    deliveryFindOne.mockReset();
     sendHabitPush.mockReset();
     removeDeadTokens.mockReset();
+    reminderDistinct.mockResolvedValue(["Asia/Karachi"]);
     reminderFind.mockReturnValue({ lean: async () => [] });
+    deliveryFindOne.mockReturnValue({ select: () => ({ lean: async () => null }) });
   });
 
   it("sends only to the FCM token on that reminder's device record", async () => {

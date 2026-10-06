@@ -6,6 +6,9 @@ const updateOne = vi.fn();
 const updateMany = vi.fn();
 
 vi.mock("@/lib/db", () => ({ connectDB: vi.fn(async () => undefined) }));
+vi.mock("@/models/Reminder", () => ({
+  Reminder: { updateMany: vi.fn(async () => ({ modifiedCount: 0 })) },
+}));
 vi.mock("@/models/User", () => ({
   User: {
     findOne: (...args: unknown[]) => findOne(...args),

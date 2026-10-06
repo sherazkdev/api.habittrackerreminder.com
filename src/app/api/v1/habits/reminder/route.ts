@@ -1,9 +1,13 @@
 import { NextRequest } from "next/server";
 import { apiError, apiOkFields } from "@/lib/api-response";
 import { deviceResolveError, resolveDeviceByFcmToken } from "@/lib/mobile-auth";
+import { enforceMobileRateLimit } from "@/lib/mobile-rate-limit";
 import { parseReminderPayload, upsertReminder } from "@/lib/reminders";
 
 export async function POST(request: NextRequest) {
+  const limited = enforceMobileRateLimit(request, "reminders");
+  if (limited) return limited;
+
   const device = await resolveDeviceByFcmToken(request);
   if (!device.ok) return deviceResolveError(device);
 

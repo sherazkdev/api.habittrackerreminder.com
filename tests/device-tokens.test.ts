@@ -15,4 +15,12 @@ describe("tokensForDeviceRecord", () => {
   it("dedupes empty values on the same record", () => {
     expect(tokensForDeviceRecord(["tok", "", "tok"])).toEqual({ tokens: ["tok"] });
   });
+
+  it("uses only the most recently seen token when multiple are stored", () => {
+    const result = tokensForDeviceRecord(["old-token", "new-token"], [
+      { token: "old-token", lastSeenAt: new Date("2026-01-01T08:00:00Z") },
+      { token: "new-token", lastSeenAt: new Date("2026-06-01T08:00:00Z") },
+    ]);
+    expect(result).toEqual({ tokens: ["new-token"] });
+  });
 });

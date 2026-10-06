@@ -5,6 +5,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    env: {
+      MOBILE_RATE_LIMIT_ENABLED: "false",
+    },
   },
   resolve: {
     alias: {

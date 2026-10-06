@@ -14,11 +14,13 @@ const ReminderSchema = new Schema(
     endTime: String,
     repeatCount: Number,
     scheduledTimes: [{ type: String, required: true }],
+    timezone: { type: String },
   },
   { timestamps: true },
 );
 
 ReminderSchema.index({ userId: 1, habitId: 1 }, { unique: true });
 ReminderSchema.index({ scheduledTimes: 1, days: 1 });
+ReminderSchema.index({ timezone: 1, scheduledTimes: 1, days: 1 });
 
 export const Reminder = models.Reminder ?? model("Reminder", ReminderSchema);

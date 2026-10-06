@@ -55,6 +55,7 @@ async function tick() {
   try {
     const response = await fetch(`${base}${path}`, {
       headers: { "x-cron-secret": secret },
+      signal: AbortSignal.timeout(55_000),
     });
     const body = await response.text();
     if (!response.ok) {

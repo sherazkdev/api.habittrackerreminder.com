@@ -90,6 +90,7 @@ describe("POST /api/v1/devices", () => {
       fcmToken: "phone-token",
       previousFcmToken: undefined,
       platform: undefined,
+      timezone: undefined,
     });
   });
 });

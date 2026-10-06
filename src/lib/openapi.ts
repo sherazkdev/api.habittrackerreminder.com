@@ -53,6 +53,11 @@ const reminderSchema = {
     startTime: { type: "string", example: "09:00" },
     endTime: { type: "string", example: "21:00" },
     repeatCount: { type: "integer", example: 4 },
+    timezone: {
+      type: "string",
+      description: "IANA timezone for scheduled times (e.g. America/New_York). Defaults to the device timezone from POST /devices.",
+      example: "America/New_York",
+    },
   },
 };
 
@@ -64,6 +69,7 @@ const reminderExample = {
   timer: true,
   repeat: false,
   time: "16:30",
+  timezone: "America/New_York",
 };
 
 const reminderRepeatExample = {
@@ -246,7 +252,7 @@ export function buildOpenApiSpec(audience: Audience = "full") {
         tags: ["Mobile"],
         summary: "Register or refresh FCM device token",
         description:
-          "Saves the FCM token only — does not send a notification. Header: `x-api-key`. Body: `fcmToken` or `fcm_token`. Optional `previousFcmToken` / `previous_fcm_token` replaces an old token on the same device record. Do not send `x-user-id`.",
+          "Saves the FCM token and device IANA timezone — does not send a notification. Header: `x-api-key`. Body: `fcmToken` or `fcm_token`, and `timezone` / `time_zone` (e.g. America/New_York). Optional `previousFcmToken` / `previous_fcm_token` replaces an old token on the same device record. Do not send `x-user-id`.",
         security: [{ apiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -260,12 +266,29 @@ export function buildOpenApiSpec(audience: Audience = "full") {
                   previousFcmToken: { type: "string", description: "Old token when Firebase refreshes the FCM token" },
                   previous_fcm_token: { type: "string" },
                   platform: { type: "string", enum: ["android", "ios"], example: "android" },
+                  timezone: {
+                    type: "string",
+                    description: "IANA timezone from the phone OS",
+                    example: "America/New_York",
+                  },
+                  time_zone: { type: "string", description: "Snake_case alias of timezone" },
+                  installationId: {
+                    type: "string",
+                    description: "Stable per-install id (8-64 chars). Keeps reminders across FCM token changes.",
+                    example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                  },
+                  installation_id: { type: "string" },
                 },
               },
               examples: {
                 register: {
                   summary: "Register current token",
-                  value: { fcmToken: "dXyz...:APA91b...", platform: "android" },
+                  value: {
+                    fcmToken: "dXyz...:APA91b...",
+                    platform: "android",
+                    timezone: "America/New_York",
+                    installationId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                  },
                 },
                 refresh: {
                   summary: "Refresh after Firebase rotates the token",
@@ -316,6 +339,36 @@ export function buildOpenApiSpec(audience: Audience = "full") {
           },
         },
         responses: { 200: { description: "Unregistered" }, 401: { description: "Unauthorized" } },
+      },
+    },
+    "/api/v1/devices/data": {
+      delete: {
+        tags: ["Mobile"],
+        summary: "Delete all server data for this device",
+        description:
+          "Removes every reminder, notification delivery log, and the device user record for the `x-fcm-token` header. Does not send a push. For privacy / Delete my data in the app.",
+        security: [{ apiKeyAuth: [], fcmTokenAuth: [] }],
+        parameters: [fcmTokenHeader],
+        responses: {
+          200: {
+            description: "Deleted",
+            content: {
+              "application/json": {
+                schema: envelope({
+                  type: "object",
+                  properties: {
+                    deletedReminders: { type: "integer", example: 2 },
+                    deletedDeliveries: { type: "integer", example: 10 },
+                    deletedUser: { type: "boolean", example: true },
+                  },
+                }),
+              },
+            },
+          },
+          401: { description: "Invalid or missing x-api-key" },
+          404: { description: "DEVICE_NOT_REGISTERED" },
+          429: { description: "RATE_LIMITED" },
+        },
       },
     },
     "/api/v1/habits/cron/reminder": {

@@ -46,10 +46,27 @@ export function isReminderDue(
   return reminder.days.includes("Everyday") || reminder.days.includes(clock.day);
 }
 
-export function dueReminderFilter(clock: { day: string; time: string }) {
+export function dueReminderFilter(
+  clock: { day: string; time: string },
+  timeZone: string,
+  legacyDefaultTimezone?: string,
+) {
+  const dayMatch = { $or: [{ days: "Everyday" }, { days: clock.day }] };
+  const tzMatch =
+    legacyDefaultTimezone && legacyDefaultTimezone === timeZone
+      ? {
+          $or: [
+            { timezone: timeZone },
+            { timezone: { $exists: false } },
+            { timezone: null },
+            { timezone: "" },
+          ],
+        }
+      : { timezone: timeZone };
+
   return {
     scheduledTimes: clock.time,
-    $or: [{ days: "Everyday" }, { days: clock.day }],
+    $and: [dayMatch, tzMatch],
   };
 }
 

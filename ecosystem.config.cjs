@@ -1,6 +1,13 @@
 /** Habit API internal port on VPS (Nginx proxies here). Change only this line. */
+const fs = require("fs");
+const path = require("path");
+
 const APP_PORT = "3012";
 const LOOPBACK = `http://127.0.0.1:${APP_PORT}`;
+
+const envFile =
+  [".env.local", ".env"].find((name) => fs.existsSync(path.join(__dirname, name))) ??
+  ".env.local";
 
 const restartGuard = {
   instances: 1,
@@ -10,7 +17,7 @@ const restartGuard = {
   max_restarts: 20,
   exp_backoff_restart_delay: 1000,
   kill_timeout: 8000,
-  env_file: ".env.local",
+  env_file: envFile,
 };
 
 module.exports = {

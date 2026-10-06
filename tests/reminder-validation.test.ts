@@ -28,6 +28,16 @@ describe("reminderPayloadSchema", () => {
     expect(reminderPayloadSchema.safeParse(timerHabit).success).toBe(true);
   });
 
+  it("accepts an optional IANA timezone on the reminder", () => {
+    expect(reminderPayloadSchema.safeParse({ ...timerHabit, timezone: "America/Chicago" }).success).toBe(
+      true,
+    );
+  });
+
+  it("rejects an invalid timezone", () => {
+    expect(reminderPayloadSchema.safeParse({ ...timerHabit, timezone: "Not/AZone" }).success).toBe(false);
+  });
+
   it("accepts the spec repeat payload", () => {
     expect(reminderPayloadSchema.safeParse(repeatHabit).success).toBe(true);
   });

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isValidTime, timeToMinutes } from "@/lib/schedule";
+import { isValidTimezone } from "@/lib/timezone";
 
 export const WEEKDAYS = [
   "Monday",
@@ -27,6 +28,12 @@ export const reminderPayloadSchema = z
     startTime: timeSchema.optional(),
     endTime: timeSchema.optional(),
     repeatCount: z.number().int().min(1).optional(),
+    timezone: z
+      .string()
+      .trim()
+      .min(1)
+      .refine(isValidTimezone, "timezone must be a valid IANA name (e.g. America/New_York)")
+      .optional(),
   })
   .superRefine((value, ctx) => {
     if (value.timer === value.repeat) {

@@ -28,6 +28,19 @@ export const env = {
   publicUrl: () => process.env.API_PUBLIC_URL ?? "http://localhost:3000",
   adminUrl: () => process.env.ADMIN_PUBLIC_URL ?? "http://localhost:3000",
   reminderTimezone: () => process.env.REMINDER_TIMEZONE ?? "Asia/Karachi",
+  mobileRateLimitEnabled: () => process.env.MOBILE_RATE_LIMIT_ENABLED !== "false",
+  mobileRateLimitWindowMs: () => {
+    const raw = Number(process.env.MOBILE_RATE_LIMIT_WINDOW_MS ?? "60000");
+    return Number.isFinite(raw) && raw > 0 ? raw : 60_000;
+  },
+  mobileRateLimitDevicesPerWindow: () => {
+    const raw = Number(process.env.MOBILE_RATE_LIMIT_DEVICES_PER_MIN ?? "30");
+    return Number.isFinite(raw) && raw > 0 ? raw : 30;
+  },
+  mobileRateLimitRemindersPerWindow: () => {
+    const raw = Number(process.env.MOBILE_RATE_LIMIT_REMINDERS_PER_MIN ?? "120");
+    return Number.isFinite(raw) && raw > 0 ? raw : 120;
+  },
 };
 
 export function isFirebaseConfigured(): boolean {

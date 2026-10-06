@@ -20,6 +20,7 @@ const NotificationDeliverySchema = new Schema(
 
 NotificationDeliverySchema.index({ createdAt: -1 });
 NotificationDeliverySchema.index({ status: 1, createdAt: -1 });
+NotificationDeliverySchema.index({ userId: 1, habitId: 1, scheduledTime: 1, createdAt: -1 });
 
 export const NotificationDelivery =
   models.NotificationDelivery ?? model("NotificationDelivery", NotificationDeliverySchema);

@@ -21,6 +21,13 @@ export const MOBILE_ENDPOINTS: EndpointRow[] = [
   { method: "POST", path: "/api/v1/habits/reminder/bulk", desc: "Bulk upsert reminders. x-api-key + x-fcm-token.", auth: "api-key-and-fcm", group: "Mobile v1" },
   { method: "POST", path: "/api/v1/devices", desc: "Register or refresh FCM token. x-api-key + { fcmToken }. Does not send a notification.", auth: "api-key", group: "Mobile v1" },
   { method: "DELETE", path: "/api/v1/devices", desc: "Unregister FCM token. x-api-key + { fcmToken }", auth: "api-key", group: "Mobile v1" },
+  {
+    method: "DELETE",
+    path: "/api/v1/devices/data",
+    desc: "Delete all server data for this device (reminders, delivery logs, user record). x-api-key + x-fcm-token.",
+    auth: "api-key-and-fcm",
+    group: "Mobile v1",
+  },
   { method: "GET", path: "/api/v1/habits/cron/reminder", desc: "Dispatch due reminders this minute", auth: "cron", group: "Cron" },
 ];
 

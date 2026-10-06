@@ -1,21 +1,55 @@
 import { createHash } from "crypto";
 import { User } from "@/models/User";
+import { Reminder } from "@/models/Reminder";
 import { connectDB } from "@/lib/db";
 
 export function userIdFromFcmToken(fcmToken: string) {
   return `fcm-${createHash("sha256").update(fcmToken).digest("hex").slice(0, 24)}`;
 }
 
+export function userIdFromInstallationId(installationId: string) {
+  return `inst-${createHash("sha256").update(installationId).digest("hex").slice(0, 24)}`;
+}
+
+async function resolveUserIdForRegistration(fcmToken: string, installationId?: string) {
+  const existingByToken = await User.findOne({ fcmTokens: fcmToken }).lean();
+  if (existingByToken) {
+    return { userId: existingByToken.userId, installationIdToSet: installationId };
+  }
+
+  if (installationId) {
+    const existingByInstall = await User.findOne({ installationId }).lean();
+    if (existingByInstall) {
+      return { userId: existingByInstall.userId, installationIdToSet: undefined };
+    }
+    return { userId: userIdFromInstallationId(installationId), installationIdToSet: installationId };
+  }
+
+  return { userId: userIdFromFcmToken(fcmToken), installationIdToSet: undefined };
+}
+
 export async function registerDevice(
   userId: string,
   fcmToken: string,
   platform?: "android" | "ios",
+  timezone?: string,
+  installationId?: string,
 ) {
   await connectDB();
   const now = new Date();
   const user = await User.findOneAndUpdate(
     { userId },
-    { $addToSet: { fcmTokens: fcmToken } },
+    {
+      $addToSet: { fcmTokens: fcmToken },
+      ...(timezone || installationId
+        ? {
+            $set: {
+              ...(timezone ? { timezone } : {}),
+              ...(installationId ? { installationId } : {}),
+            },
+          }
+        : {}),
+    },
     { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
   );
 
@@ -45,6 +79,11 @@ export async function registerDevice(
       },
     );
   }
+
+  if (timezone) {
+    await Reminder.updateMany({ userId }, { $set: { timezone } });
+  }
+
   return { registered: true as const };
 }
 
@@ -75,11 +114,15 @@ export async function registerOrRefreshDevice(input: {
   fcmToken: string;
   previousFcmToken?: string;
   platform?: "android" | "ios";
+  timezone?: string;
+  installationId?: string;
 }): Promise<RegisterDeviceResult> {
   await connectDB();
   const fcmToken = input.fcmToken;
   const previousFcmToken = input.previousFcmToken;
   const platform = input.platform;
+  const timezone = input.timezone;
+  const installationId = input.installationId;
 
   if (previousFcmToken && previousFcmToken !== fcmToken) {
     const previousOwner = await User.findOne({ fcmTokens: previousFcmToken }).lean();
@@ -106,12 +149,17 @@ export async function registerOrRefreshDevice(input: {
       { userId: previousOwner.userId },
       { $pull: { fcmTokens: previousFcmToken, deviceMeta: { token: previousFcmToken } } },
     );
-    await registerDevice(previousOwner.userId, fcmToken, platform);
+    await registerDevice(
+      previousOwner.userId,
+      fcmToken,
+      platform,
+      timezone,
+      installationId ?? previousOwner.installationId,
+    );
     return { ok: true };
   }
 
-  const existing = await User.findOne({ fcmTokens: fcmToken }).lean();
-  const userId = existing?.userId ?? userIdFromFcmToken(fcmToken);
-  await registerDevice(userId, fcmToken, platform);
+  const { userId, installationIdToSet } = await resolveUserIdForRegistration(fcmToken, installationId);
+  await registerDevice(userId, fcmToken, platform, timezone, installationIdToSet);
   return { ok: true };
 }

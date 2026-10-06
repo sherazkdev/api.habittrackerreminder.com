@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-response";
 import { deviceResolveError, resolveDeviceByFcmToken } from "@/lib/mobile-auth";
+import { enforceMobileRateLimit } from "@/lib/mobile-rate-limit";
 import { deleteReminder } from "@/lib/reminders";
 
 export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ habitId: string }> },
 ) {
+  const limited = enforceMobileRateLimit(request, "reminders");
+  if (limited) return limited;
+
   const device = await resolveDeviceByFcmToken(request);
   if (!device.ok) return deviceResolveError(device);
 

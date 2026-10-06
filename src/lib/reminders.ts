@@ -4,12 +4,59 @@ import { NotificationDelivery } from "@/models/NotificationDelivery";
 import { connectDB } from "@/lib/db";
 import { computeScheduledTimes, currentClock, dueReminderFilter } from "@/lib/schedule";
 import { reminderPayloadSchema, type ReminderPayload } from "@/lib/reminder-validation";
+import { resolveReminderTimezoneWithSource, type TimezoneSource } from "@/lib/timezone-resolve";
+
+export type { TimezoneSource };
+import { wasReminderDeliveredRecently } from "@/lib/delivery-idempotency";
 import { tokensForDeviceRecord } from "@/lib/device-tokens";
 import { removeDeadTokens, sendHabitPush } from "@/lib/fcm";
 import { env } from "@/lib/env";
 
+type ReminderLean = {
+  userId: string;
+  habitId: string;
+  habitName: string;
+  notificationBody: string;
+  timezone?: string | null;
+};
+
+function effectiveReminderTimezone(reminder: { timezone?: string | null }, defaultTz: string) {
+  const value = reminder.timezone?.trim();
+  return value || defaultTz;
+}
+
+async function listReminderTimezones(): Promise<string[]> {
+  await connectDB();
+  const defaultTz = env.reminderTimezone();
+  const raw = await Reminder.distinct("timezone");
+  const set = new Set<string>();
+  for (const tz of raw) {
+    if (typeof tz === "string" && tz.trim()) set.add(tz.trim());
+    else set.add(defaultTz);
+  }
+  if (set.size === 0) set.add(defaultTz);
+  return [...set];
+}
+
+async function findDueReminderDocs(): Promise<{ due: ReminderLean[]; timezones: string[] }> {
+  await connectDB();
+  const defaultTz = env.reminderTimezone();
+  const timezones = await listReminderTimezones();
+  const due: ReminderLean[] = [];
+
+  for (const tz of timezones) {
+    const clock = currentClock(tz);
+    const filter = dueReminderFilter(clock, tz, defaultTz);
+    const batch = await Reminder.find(filter).lean<ReminderLean[]>();
+    due.push(...batch);
+  }
+
+  return { due, timezones };
+}
+
 export async function upsertReminder(userId: string, payload: ReminderPayload) {
   await connectDB();
+  const { timezone, source: timezoneSource } = await resolveReminderTimezoneWithSource(userId, payload);
   const scheduledTimes = computeScheduledTimes(payload);
   const doc = await Reminder.findOneAndUpdate(
     { userId, habitId: payload.habitId },
@@ -26,10 +73,16 @@ export async function upsertReminder(userId: string, payload: ReminderPayload) {
       endTime: payload.endTime,
       repeatCount: payload.repeatCount,
       scheduledTimes,
+      timezone,
     },
     { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
   );
-  return { habitId: doc.habitId, scheduledTimes: doc.scheduledTimes };
+  return {
+    habitId: doc.habitId,
+    scheduledTimes: doc.scheduledTimes,
+    timezone: doc.timezone,
+    timezoneSource,
+  };
 }
 
 export async function deleteReminder(userId: string, habitId: string) {
@@ -51,28 +104,36 @@ export function parseReminderPayload(body: unknown) {
 }
 
 export async function getDueReminders(now = new Date()) {
-  await connectDB();
-  const clock = currentClock(env.reminderTimezone());
   void now;
-  return Reminder.find(dueReminderFilter(clock)).lean();
+  const { due } = await findDueReminderDocs();
+  return due;
 }
 
-async function tokensOnDeviceRecord(userId: string): Promise<string[]> {
+async function resolvePushTargets(userId: string) {
   const user = await User.findOne({ userId }).lean();
-  return user?.fcmTokens?.filter(Boolean) ?? [];
+  const ownTokens = user?.fcmTokens?.filter(Boolean) ?? [];
+  const deviceMeta = user?.deviceMeta as { token: string; lastSeenAt?: Date; createdAt?: Date }[] | undefined;
+  return tokensForDeviceRecord(ownTokens, deviceMeta);
 }
 
 export async function dispatchDueReminders() {
   await connectDB();
-  const clock = currentClock(env.reminderTimezone());
-  const due = await Reminder.find(dueReminderFilter(clock)).lean();
+  const defaultTz = env.reminderTimezone();
+  const { due, timezones } = await findDueReminderDocs();
 
   let sent = 0;
   let failed = 0;
   let skipped = 0;
 
   for (const reminder of due) {
-    const resolved = tokensForDeviceRecord(await tokensOnDeviceRecord(reminder.userId));
+    const tz = effectiveReminderTimezone(reminder, defaultTz);
+    const clock = currentClock(tz);
+
+    if (await wasReminderDeliveredRecently(reminder.userId, reminder.habitId, clock.time)) {
+      continue;
+    }
+
+    const resolved = await resolvePushTargets(reminder.userId);
     const tokens = resolved.tokens;
     if (tokens.length === 0) {
       skipped += 1;
@@ -118,8 +179,8 @@ export async function dispatchDueReminders() {
   }
 
   return {
-    timezone: env.reminderTimezone(),
-    clock,
+    timezone: defaultTz,
+    timezonesChecked: timezones,
     checked: due.length,
     sent,
     failed,
