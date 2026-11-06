@@ -1,0 +1,62 @@
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    ports:
+      # Internal container port stays 3012. Host bind defaults to 3012; VPS parallel deploy: API_HOST_PORT=3112
+      - "127.0.0.1:${API_HOST_PORT:-3012}:3012"
+    env_file:
+      - .env.local
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3012
+      # Always use in-compose MongoDB (do not inherit host/cloud MONGODB_URI from env files).
+      MONGODB_URI: mongodb://appuser:${MONGO_PASSWORD}@mongodb:27017/habit_tracker?authSource=habit_tracker
+      CRON_INTERNAL_URL: http://api:3012
+      # Prevent login-time ensureAdminSeed() writes even if .env.local enables seeding.
+      ADMIN_SEED_ENABLED: "false"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  # Not started by default — avoids duplicate pushes vs production.
+  # Enable explicitly: docker compose --profile cron up -d
+  cron:
+    profiles: ["cron"]
+    build: .
+    restart: unless-stopped
+    command: ["node", "scripts/cron-worker.mjs"]
+    env_file:
+      - .env.local
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: mongodb://appuser:${MONGO_PASSWORD}@mongodb:27017/habit_tracker?authSource=habit_tracker
+      CRON_INTERNAL_URL: http://api:3012
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  mongodb:
+    image: mongo:8
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD in .env}
+      MONGO_APP_PASSWORD: ${MONGO_PASSWORD:?Set MONGO_PASSWORD in .env}
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'mongosh --quiet -u root -p "$$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval "db.adminCommand({ping:1})"'
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  mongodb_data:
