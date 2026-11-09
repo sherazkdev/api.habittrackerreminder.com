@@ -269,8 +269,8 @@ export function FcmRecentDeliveriesTable({
                 <DeliveryStatusBadge status={row.status} />
               </td>
               <td className="hidden max-w-[280px] px-4 py-3 text-[12px] text-[var(--text-muted)] lg:table-cell">
-                {row.status === "skipped"
-                  ? row.skipReason || "No FCM token on this user"
+                {row.status === "skipped" || row.status === "failed" || row.status === "partial"
+                  ? row.skipReason || (row.status === "skipped" ? "No FCM token on this user" : "—")
                   : "—"}
               </td>
             </tr>

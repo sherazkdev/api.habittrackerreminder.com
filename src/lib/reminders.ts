@@ -112,7 +112,9 @@ export async function getDueReminders(now = new Date()) {
 async function resolvePushTargets(userId: string) {
   const user = await User.findOne({ userId }).lean();
   const ownTokens = user?.fcmTokens?.filter(Boolean) ?? [];
-  const deviceMeta = user?.deviceMeta as { token: string; lastSeenAt?: Date; createdAt?: Date }[] | undefined;
+  const deviceMeta = user?.deviceMeta as
+    | { token: string; platform?: "android" | "ios"; lastSeenAt?: Date; createdAt?: Date }[]
+    | undefined;
   return tokensForDeviceRecord(ownTokens, deviceMeta);
 }
 
@@ -152,9 +154,11 @@ export async function dispatchDueReminders() {
 
     const result = await sendHabitPush({
       tokens,
+      platforms: resolved.platforms,
       habitId: reminder.habitId,
       habitName: reminder.habitName,
       notificationBody: reminder.notificationBody,
+      userId: reminder.userId,
     });
     await removeDeadTokens(reminder.userId, result.deadTokens);
 
@@ -175,6 +179,7 @@ export async function dispatchDueReminders() {
       scheduledTime: clock.time,
       tokenCount: tokens.length,
       status,
+      errorMessage: status === "delivered" ? undefined : result.error,
     });
   }
 

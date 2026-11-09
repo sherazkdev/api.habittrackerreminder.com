@@ -16,6 +16,80 @@ function defaultPlatforms(tokens: string[]): FcmPlatform[] {
   return tokens.map(() => "android");
 }
 
+function otherPlatform(platform: FcmPlatform): FcmPlatform {
+  return platform === "android" ? "ios" : "android";
+}
+
+function errorCode(error: unknown): string {
+  return typeof error === "object" && error && "code" in error ? String(error.code) : "";
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "FCM send failed";
+}
+
+function isSenderIdMismatch(error: unknown): boolean {
+  const code = errorCode(error);
+  const message = errorMessage(error);
+  return (
+    code === "messaging/mismatched-credential" ||
+    /senderid mismatch/i.test(message) ||
+    /mismatched-credential/i.test(message)
+  );
+}
+
+function buildMessage(
+  platform: FcmPlatform,
+  token: string,
+  input: {
+    habitId: string;
+    habitName: string;
+    notificationBody: string;
+  },
+): Message {
+  const basePayload = {
+    data: {
+      type: "habit_reminder",
+      habitId: input.habitId,
+      habitName: input.habitName,
+      notificationBody: input.notificationBody,
+    },
+  };
+
+  if (platform === "ios") {
+    return {
+      token,
+      ...basePayload,
+      apns: {
+        headers: { "apns-priority": "10" },
+        payload: {
+          aps: {
+            alert: {
+              title: input.habitName,
+              body: input.notificationBody,
+            },
+            sound: "default",
+          },
+        },
+      },
+    };
+  }
+
+  return {
+    token,
+    ...basePayload,
+    android: { priority: "high" },
+  };
+}
+
+async function rememberCorrectedPlatform(userId: string | undefined, token: string, platform: FcmPlatform) {
+  if (!userId) return;
+  await User.updateOne(
+    { userId, "deviceMeta.token": token },
+    { $set: { "deviceMeta.$.platform": platform, "deviceMeta.$.lastSeenAt": new Date() } },
+  );
+}
+
 export async function sendHabitPush(input: {
   tokens: string[];
   /** One platform per token; required when tokens come from resolvePushTargets. */
@@ -40,6 +114,8 @@ export async function sendHabitPush(input: {
 
   if (!isFirebaseConfigured() || input.tokens.length === 0) {
     const status = input.tokens.length === 0 ? "skipped" : "failed";
+    const error =
+      input.tokens.length === 0 ? undefined : "Firebase Admin is not configured";
     if (input.logDelivery && input.userId) {
       await connectDB();
       await NotificationDelivery.create({
@@ -50,9 +126,10 @@ export async function sendHabitPush(input: {
         scheduledTime: input.scheduledTime ?? "now",
         tokenCount: input.tokens.length,
         status,
+        errorMessage: error,
       });
     }
-    return { successCount: 0, failureCount: input.tokens.length, deadTokens: [], status };
+    return { successCount: 0, failureCount: input.tokens.length, deadTokens: [], status, error };
   }
 
   const deadTokens: string[] = [];
@@ -62,59 +139,85 @@ export async function sendHabitPush(input: {
 
   for (let i = 0; i < input.tokens.length; i++) {
     const token = input.tokens[i]!;
-    const platform = platforms[i]!;
-    const app = getFirebaseAdminForPlatform(platform);
+    let platform = platforms[i]!;
+    let app = getFirebaseAdminForPlatform(platform);
+
+    if (!app) {
+      const fallback = otherPlatform(platform);
+      app = getFirebaseAdminForPlatform(fallback);
+      if (app) platform = fallback;
+    }
+
     if (!app) {
       failureCount += 1;
       lastError =
         platform === "android"
           ? "Firebase Admin not configured for Android (set FIREBASE_ANDROID_* or legacy FIREBASE_*)"
           : "Firebase Admin not configured for iOS (set FIREBASE_IOS_* or legacy FIREBASE_*)";
+      console.error("[fcm]", lastError, { habitId: input.habitId, platform });
       continue;
     }
 
-    const messaging = getMessaging(app);
-    const basePayload = {
-      data: {
-        type: "habit_reminder",
-        habitId: input.habitId,
-        habitName: input.habitName,
-        notificationBody: input.notificationBody,
-      },
-    };
-
-    const message: Message =
-      platform === "ios"
-        ? {
-            token,
-            ...basePayload,
-            apns: {
-              headers: { "apns-priority": "10" },
-              payload: {
-                aps: {
-                  alert: {
-                    title: input.habitName,
-                    body: input.notificationBody,
-                  },
-                  sound: "default",
-                },
-              },
-            },
-          }
-        : {
-            token,
-            ...basePayload,
-            android: { priority: "high" },
-          };
-
     try {
-      await messaging.send(message);
+      await getMessaging(app).send(
+        buildMessage(platform, token, {
+          habitId: input.habitId,
+          habitName: input.habitName,
+          notificationBody: input.notificationBody,
+        }),
+      );
       successCount += 1;
+      if (platform !== platforms[i]) {
+        await rememberCorrectedPlatform(input.userId, token, platform);
+      }
+      continue;
     } catch (error) {
+      if (isSenderIdMismatch(error)) {
+        const alt = otherPlatform(platform);
+        const altApp = getFirebaseAdminForPlatform(alt);
+        if (altApp) {
+          try {
+            await getMessaging(altApp).send(
+              buildMessage(alt, token, {
+                habitId: input.habitId,
+                habitName: input.habitName,
+                notificationBody: input.notificationBody,
+              }),
+            );
+            successCount += 1;
+            await rememberCorrectedPlatform(input.userId, token, alt);
+            console.warn("[fcm] SenderId mismatch recovered via platform fallback", {
+              habitId: input.habitId,
+              from: platform,
+              to: alt,
+            });
+            continue;
+          } catch (fallbackError) {
+            failureCount += 1;
+            lastError = errorMessage(fallbackError);
+            const code = errorCode(fallbackError);
+            if (DEAD_TOKEN_CODES.has(code)) deadTokens.push(token);
+            console.error("[fcm] send failed after platform fallback", {
+              habitId: input.habitId,
+              platform: alt,
+              code,
+              error: lastError,
+            });
+            continue;
+          }
+        }
+      }
+
       failureCount += 1;
-      lastError = error instanceof Error ? error.message : "FCM send failed";
-      const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
+      lastError = errorMessage(error);
+      const code = errorCode(error);
       if (DEAD_TOKEN_CODES.has(code)) deadTokens.push(token);
+      console.error("[fcm] send failed", {
+        habitId: input.habitId,
+        platform,
+        code,
+        error: lastError,
+      });
     }
   }
 
@@ -131,6 +234,7 @@ export async function sendHabitPush(input: {
       scheduledTime: input.scheduledTime ?? "now",
       tokenCount: input.tokens.length,
       status,
+      errorMessage: status === "delivered" ? undefined : lastError,
     });
   }
 

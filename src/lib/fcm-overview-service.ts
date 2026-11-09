@@ -111,11 +111,13 @@ function nodeStatus(ok: boolean): FlowStatus {
       tokenCount: doc.tokenCount ?? 0,
       status: doc.status as "delivered" | "partial" | "failed" | "skipped",
       skipReason:
-        typeof doc.skipReason === "string" && doc.skipReason
-          ? doc.skipReason
-          : doc.status === "skipped" && (doc.tokenCount ?? 0) === 0
-            ? "No FCM token on this device record"
-            : undefined,
+        typeof doc.errorMessage === "string" && doc.errorMessage
+          ? doc.errorMessage
+          : typeof doc.skipReason === "string" && doc.skipReason
+            ? doc.skipReason
+            : doc.status === "skipped" && (doc.tokenCount ?? 0) === 0
+              ? "No FCM token on this device record"
+              : undefined,
     })),
     activity: [
       ...recentDeliveries.slice(0, 3).map((doc, index) => ({

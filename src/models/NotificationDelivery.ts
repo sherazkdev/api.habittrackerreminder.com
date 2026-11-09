@@ -14,6 +14,8 @@ const NotificationDeliverySchema = new Schema(
       required: true,
     },
     skipReason: String,
+    /** FCM / dispatch error text for failed or partial sends */
+    errorMessage: String,
   },
   { timestamps: true },
 );
