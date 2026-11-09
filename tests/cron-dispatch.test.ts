@@ -16,6 +16,7 @@ vi.mock("@/lib/schedule", async (importOriginal) => {
   return {
     ...actual,
     currentClock: () => ({ day: "Tuesday", time: "16:30" }),
+    previousClock: () => ({ day: "Tuesday", time: "16:30" }),
     dueReminderFilter: (clock: { day: string; time: string }, timeZone: string) => ({
       scheduledTimes: clock.time,
       timeZone,

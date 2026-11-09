@@ -70,17 +70,25 @@ export function dueReminderFilter(
   };
 }
 
-export function currentClock(timeZone: string): { day: string; time: string } {
-  const now = new Date();
+export function clockAt(timeZone: string, at: Date): { day: string; time: string } {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone,
     weekday: "long",
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
-  }).formatToParts(now);
-  const day = parts.find((part) => part.type === "weekday")?.value ?? weekdayName(now, timeZone);
+  }).formatToParts(at);
+  const day = parts.find((part) => part.type === "weekday")?.value ?? weekdayName(at, timeZone);
   const hour = parts.find((part) => part.type === "hour")?.value ?? "00";
   const minute = parts.find((part) => part.type === "minute")?.value ?? "00";
   return { day, time: `${hour}:${minute}` };
+}
+
+export function currentClock(timeZone: string): { day: string; time: string } {
+  return clockAt(timeZone, new Date());
+}
+
+/** Previous wall-clock minute in the timezone — used as a 1-minute grace catch for late saves. */
+export function previousClock(timeZone: string): { day: string; time: string } {
+  return clockAt(timeZone, new Date(Date.now() - 60_000));
 }

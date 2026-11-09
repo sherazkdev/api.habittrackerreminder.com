@@ -2,7 +2,7 @@ import { Reminder } from "@/models/Reminder";
 import { User } from "@/models/User";
 import { NotificationDelivery } from "@/models/NotificationDelivery";
 import { connectDB } from "@/lib/db";
-import { computeScheduledTimes, currentClock, dueReminderFilter, isReminderDue } from "@/lib/schedule";
+import { computeScheduledTimes, currentClock, dueReminderFilter, previousClock } from "@/lib/schedule";
 import { reminderPayloadSchema, type ReminderPayload } from "@/lib/reminder-validation";
 import { resolveReminderTimezoneWithSource, type TimezoneSource } from "@/lib/timezone-resolve";
 
@@ -22,6 +22,8 @@ type ReminderLean = {
   scheduledTimes?: string[];
 };
 
+type DueReminder = ReminderLean & { dueScheduledTime: string };
+
 function effectiveReminderTimezone(reminder: { timezone?: string | null }, defaultTz: string) {
   const value = reminder.timezone?.trim();
   return value || defaultTz;
@@ -40,17 +42,25 @@ async function listReminderTimezones(): Promise<string[]> {
   return [...set];
 }
 
-async function findDueReminderDocs(): Promise<{ due: ReminderLean[]; timezones: string[] }> {
+async function findDueReminderDocs(): Promise<{ due: DueReminder[]; timezones: string[] }> {
   await connectDB();
   const defaultTz = env.reminderTimezone();
   const timezones = await listReminderTimezones();
-  const due: ReminderLean[] = [];
+  const due: DueReminder[] = [];
+  const seen = new Set<string>();
 
   for (const tz of timezones) {
-    const clock = currentClock(tz);
-    const filter = dueReminderFilter(clock, tz, defaultTz);
-    const batch = await Reminder.find(filter).lean<ReminderLean[]>();
-    due.push(...batch);
+    // Current minute + previous minute grace (save after cron tick still delivers within ~1 min).
+    for (const clock of [currentClock(tz), previousClock(tz)]) {
+      const filter = dueReminderFilter(clock, tz, defaultTz);
+      const batch = await Reminder.find(filter).lean<ReminderLean[]>();
+      for (const reminder of batch) {
+        const key = `${reminder.userId}|${reminder.habitId}|${clock.time}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        due.push({ ...reminder, dueScheduledTime: clock.time });
+      }
+    }
   }
 
   return { due, timezones };
@@ -117,21 +127,6 @@ async function dispatchOneDueReminder(
   return status === "failed" ? "failed" : "sent";
 }
 
-/**
- * If the saved schedule is due in the current clock minute, send now.
- * Covers the common release-test case: user picks "this minute" after cron already ticked.
- */
-async function dispatchIfDueNow(reminder: ReminderLean) {
-  const defaultTz = env.reminderTimezone();
-  const tz = effectiveReminderTimezone(reminder, defaultTz);
-  const clock = currentClock(tz);
-  const days = reminder.days ?? ["Everyday"];
-  const scheduledTimes = reminder.scheduledTimes ?? [];
-  if (!isReminderDue({ scheduledTimes, days }, clock)) return;
-
-  await dispatchOneDueReminder(reminder, clock.time);
-}
-
 export async function upsertReminder(userId: string, payload: ReminderPayload) {
   await connectDB();
   const { timezone, source: timezoneSource } = await resolveReminderTimezoneWithSource(userId, payload);
@@ -156,16 +151,7 @@ export async function upsertReminder(userId: string, payload: ReminderPayload) {
     { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
   );
 
-  await dispatchIfDueNow({
-    userId: doc.userId,
-    habitId: doc.habitId,
-    habitName: doc.habitName,
-    notificationBody: doc.notificationBody,
-    timezone: doc.timezone,
-    days: doc.days,
-    scheduledTimes: doc.scheduledTimes,
-  });
-
+  // Save only — cron delivers at the scheduled minute (with 1-minute grace). No push on save.
   return {
     habitId: doc.habitId,
     scheduledTimes: doc.scheduledTimes,
@@ -208,9 +194,7 @@ export async function dispatchDueReminders() {
   let skipped = 0;
 
   for (const reminder of due) {
-    const tz = effectiveReminderTimezone(reminder, defaultTz);
-    const clock = currentClock(tz);
-    const outcome = await dispatchOneDueReminder(reminder, clock.time);
+    const outcome = await dispatchOneDueReminder(reminder, reminder.dueScheduledTime);
     if (outcome === "sent") sent += 1;
     else if (outcome === "failed") failed += 1;
     else if (outcome === "skipped") skipped += 1;
