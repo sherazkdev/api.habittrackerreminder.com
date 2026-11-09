@@ -79,9 +79,11 @@ describe("dispatchDueReminders", () => {
     expect(result.sent).toBe(1);
     expect(sendHabitPush).toHaveBeenCalledWith({
       tokens: ["token-a"],
+      platforms: ["android"],
       habitId: "habit_001",
       habitName: "Morning Walk",
       notificationBody: "Time for your habit",
+      userId: "device-a",
     });
     expect(deliveryCreate).toHaveBeenCalledWith(expect.objectContaining({ tokenCount: 1, status: "delivered" }));
   });
@@ -126,6 +128,8 @@ describe("dispatchDueReminders", () => {
     sendHabitPush.mockResolvedValue({ successCount: 1, failureCount: 0, deadTokens: [] });
 
     await dispatchDueReminders();
-    expect(sendHabitPush).toHaveBeenCalledWith(expect.objectContaining({ tokens: ["new-token"] }));
+    expect(sendHabitPush).toHaveBeenCalledWith(
+      expect.objectContaining({ tokens: ["new-token"], platforms: ["android"] }),
+    );
   });
 });

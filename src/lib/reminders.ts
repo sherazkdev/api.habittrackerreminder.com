@@ -2,7 +2,7 @@ import { Reminder } from "@/models/Reminder";
 import { User } from "@/models/User";
 import { NotificationDelivery } from "@/models/NotificationDelivery";
 import { connectDB } from "@/lib/db";
-import { computeScheduledTimes, currentClock, dueReminderFilter } from "@/lib/schedule";
+import { computeScheduledTimes, currentClock, dueReminderFilter, isReminderDue } from "@/lib/schedule";
 import { reminderPayloadSchema, type ReminderPayload } from "@/lib/reminder-validation";
 import { resolveReminderTimezoneWithSource, type TimezoneSource } from "@/lib/timezone-resolve";
 
@@ -18,6 +18,8 @@ type ReminderLean = {
   habitName: string;
   notificationBody: string;
   timezone?: string | null;
+  days?: string[];
+  scheduledTimes?: string[];
 };
 
 function effectiveReminderTimezone(reminder: { timezone?: string | null }, defaultTz: string) {
@@ -54,6 +56,82 @@ async function findDueReminderDocs(): Promise<{ due: ReminderLean[]; timezones: 
   return { due, timezones };
 }
 
+async function resolvePushTargets(userId: string) {
+  const user = await User.findOne({ userId }).lean();
+  const ownTokens = user?.fcmTokens?.filter(Boolean) ?? [];
+  const deviceMeta = user?.deviceMeta as
+    | { token: string; platform?: "android" | "ios"; lastSeenAt?: Date; createdAt?: Date }[]
+    | undefined;
+  return tokensForDeviceRecord(ownTokens, deviceMeta);
+}
+
+/** Send one due reminder. Returns sent | failed | skipped | idempotent. */
+async function dispatchOneDueReminder(
+  reminder: ReminderLean,
+  scheduledTime: string,
+): Promise<"sent" | "failed" | "skipped" | "idempotent"> {
+  if (await wasReminderDeliveredRecently(reminder.userId, reminder.habitId, scheduledTime)) {
+    return "idempotent";
+  }
+
+  const resolved = await resolvePushTargets(reminder.userId);
+  const tokens = resolved.tokens;
+  if (tokens.length === 0) {
+    await NotificationDelivery.create({
+      userId: reminder.userId,
+      habitId: reminder.habitId,
+      habitName: reminder.habitName,
+      notificationBody: reminder.notificationBody,
+      scheduledTime,
+      tokenCount: 0,
+      status: "skipped",
+      skipReason: resolved.skipReason,
+    });
+    return "skipped";
+  }
+
+  const result = await sendHabitPush({
+    tokens,
+    platforms: resolved.platforms,
+    habitId: reminder.habitId,
+    habitName: reminder.habitName,
+    notificationBody: reminder.notificationBody,
+    userId: reminder.userId,
+  });
+  await removeDeadTokens(reminder.userId, result.deadTokens);
+
+  const status =
+    result.successCount === 0 ? "failed" : result.failureCount > 0 ? "partial" : "delivered";
+
+  await NotificationDelivery.create({
+    userId: reminder.userId,
+    habitId: reminder.habitId,
+    habitName: reminder.habitName,
+    notificationBody: reminder.notificationBody,
+    scheduledTime,
+    tokenCount: tokens.length,
+    status,
+    errorMessage: status === "delivered" ? undefined : result.error,
+  });
+
+  return status === "failed" ? "failed" : "sent";
+}
+
+/**
+ * If the saved schedule is due in the current clock minute, send now.
+ * Covers the common release-test case: user picks "this minute" after cron already ticked.
+ */
+async function dispatchIfDueNow(reminder: ReminderLean) {
+  const defaultTz = env.reminderTimezone();
+  const tz = effectiveReminderTimezone(reminder, defaultTz);
+  const clock = currentClock(tz);
+  const days = reminder.days ?? ["Everyday"];
+  const scheduledTimes = reminder.scheduledTimes ?? [];
+  if (!isReminderDue({ scheduledTimes, days }, clock)) return;
+
+  await dispatchOneDueReminder(reminder, clock.time);
+}
+
 export async function upsertReminder(userId: string, payload: ReminderPayload) {
   await connectDB();
   const { timezone, source: timezoneSource } = await resolveReminderTimezoneWithSource(userId, payload);
@@ -77,6 +155,17 @@ export async function upsertReminder(userId: string, payload: ReminderPayload) {
     },
     { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
   );
+
+  await dispatchIfDueNow({
+    userId: doc.userId,
+    habitId: doc.habitId,
+    habitName: doc.habitName,
+    notificationBody: doc.notificationBody,
+    timezone: doc.timezone,
+    days: doc.days,
+    scheduledTimes: doc.scheduledTimes,
+  });
+
   return {
     habitId: doc.habitId,
     scheduledTimes: doc.scheduledTimes,
@@ -109,15 +198,6 @@ export async function getDueReminders(now = new Date()) {
   return due;
 }
 
-async function resolvePushTargets(userId: string) {
-  const user = await User.findOne({ userId }).lean();
-  const ownTokens = user?.fcmTokens?.filter(Boolean) ?? [];
-  const deviceMeta = user?.deviceMeta as
-    | { token: string; platform?: "android" | "ios"; lastSeenAt?: Date; createdAt?: Date }[]
-    | undefined;
-  return tokensForDeviceRecord(ownTokens, deviceMeta);
-}
-
 export async function dispatchDueReminders() {
   await connectDB();
   const defaultTz = env.reminderTimezone();
@@ -130,57 +210,10 @@ export async function dispatchDueReminders() {
   for (const reminder of due) {
     const tz = effectiveReminderTimezone(reminder, defaultTz);
     const clock = currentClock(tz);
-
-    if (await wasReminderDeliveredRecently(reminder.userId, reminder.habitId, clock.time)) {
-      continue;
-    }
-
-    const resolved = await resolvePushTargets(reminder.userId);
-    const tokens = resolved.tokens;
-    if (tokens.length === 0) {
-      skipped += 1;
-      await NotificationDelivery.create({
-        userId: reminder.userId,
-        habitId: reminder.habitId,
-        habitName: reminder.habitName,
-        notificationBody: reminder.notificationBody,
-        scheduledTime: clock.time,
-        tokenCount: 0,
-        status: "skipped",
-        skipReason: resolved.skipReason,
-      });
-      continue;
-    }
-
-    const result = await sendHabitPush({
-      tokens,
-      platforms: resolved.platforms,
-      habitId: reminder.habitId,
-      habitName: reminder.habitName,
-      notificationBody: reminder.notificationBody,
-      userId: reminder.userId,
-    });
-    await removeDeadTokens(reminder.userId, result.deadTokens);
-
-    const status =
-      result.successCount === 0
-        ? "failed"
-        : result.failureCount > 0
-          ? "partial"
-          : "delivered";
-    if (status === "failed") failed += 1;
-    else sent += 1;
-
-    await NotificationDelivery.create({
-      userId: reminder.userId,
-      habitId: reminder.habitId,
-      habitName: reminder.habitName,
-      notificationBody: reminder.notificationBody,
-      scheduledTime: clock.time,
-      tokenCount: tokens.length,
-      status,
-      errorMessage: status === "delivered" ? undefined : result.error,
-    });
+    const outcome = await dispatchOneDueReminder(reminder, clock.time);
+    if (outcome === "sent") sent += 1;
+    else if (outcome === "failed") failed += 1;
+    else if (outcome === "skipped") skipped += 1;
   }
 
   return {
