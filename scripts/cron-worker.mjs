@@ -31,6 +31,9 @@ const base = (process.env.CRON_INTERNAL_URL ?? `http://127.0.0.1:${process.env.P
 );
 const secret = process.env.CRON_SECRET ?? "";
 const path = "/api/v1/habits/cron/reminder";
+/** Sub-minute ticks so a reminder saved mid-minute still fires in the same HH:MM. */
+const tickMsRaw = Number(process.env.CRON_TICK_MS ?? "5000");
+const TICK_MS = Number.isFinite(tickMsRaw) && tickMsRaw >= 1000 && tickMsRaw <= 30_000 ? tickMsRaw : 5000;
 
 let busy = false;
 
@@ -38,8 +41,8 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function msUntilNextMinute() {
-  return 60_000 - (Date.now() % 60_000);
+function msUntilNextTick() {
+  return TICK_MS - (Date.now() % TICK_MS);
 }
 
 async function tick() {
@@ -55,7 +58,7 @@ async function tick() {
   try {
     const response = await fetch(`${base}${path}`, {
       headers: { "x-cron-secret": secret },
-      signal: AbortSignal.timeout(55_000),
+      signal: AbortSignal.timeout(Math.max(10_000, TICK_MS - 500)),
     });
     const body = await response.text();
     if (!response.ok) {
@@ -70,9 +73,9 @@ async function tick() {
   }
 }
 
-console.log(`[cron] targeting ${base}${path} every minute`);
-await sleep(msUntilNextMinute());
+console.log(`[cron] targeting ${base}${path} every ${TICK_MS}ms (aligned)`);
+await sleep(msUntilNextTick());
 for (;;) {
   await tick();
-  await sleep(msUntilNextMinute());
+  await sleep(msUntilNextTick());
 }

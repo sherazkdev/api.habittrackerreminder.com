@@ -2,7 +2,7 @@ import { Reminder } from "@/models/Reminder";
 import { User } from "@/models/User";
 import { NotificationDelivery } from "@/models/NotificationDelivery";
 import { connectDB } from "@/lib/db";
-import { computeScheduledTimes, currentClock, dueReminderFilter, previousClock } from "@/lib/schedule";
+import { computeScheduledTimes, currentClock, dueReminderFilter } from "@/lib/schedule";
 import { reminderPayloadSchema, type ReminderPayload } from "@/lib/reminder-validation";
 import { resolveReminderTimezoneWithSource, type TimezoneSource } from "@/lib/timezone-resolve";
 
@@ -50,16 +50,15 @@ async function findDueReminderDocs(): Promise<{ due: DueReminder[]; timezones: s
   const seen = new Set<string>();
 
   for (const tz of timezones) {
-    // Current minute + previous minute grace (save after cron tick still delivers within ~1 min).
-    for (const clock of [currentClock(tz), previousClock(tz)]) {
-      const filter = dueReminderFilter(clock, tz, defaultTz);
-      const batch = await Reminder.find(filter).lean<ReminderLean[]>();
-      for (const reminder of batch) {
-        const key = `${reminder.userId}|${reminder.habitId}|${clock.time}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        due.push({ ...reminder, dueScheduledTime: clock.time });
-      }
+    // Only the current wall-clock minute — exact scheduled HH:MM, no early/late window.
+    const clock = currentClock(tz);
+    const filter = dueReminderFilter(clock, tz, defaultTz);
+    const batch = await Reminder.find(filter).lean<ReminderLean[]>();
+    for (const reminder of batch) {
+      const key = `${reminder.userId}|${reminder.habitId}|${clock.time}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      due.push({ ...reminder, dueScheduledTime: clock.time });
     }
   }
 

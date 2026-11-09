@@ -1,12 +1,13 @@
 import { NotificationDelivery } from "@/models/NotificationDelivery";
 import { connectDB } from "@/lib/db";
 
-/** Prevents duplicate pushes when cron runs twice in the same clock minute. */
+/** Prevents duplicate pushes when cron ticks multiple times in the same clock minute. */
 export async function wasReminderDeliveredRecently(
   userId: string,
   habitId: string,
   scheduledTime: string,
-  windowMs = 90_000,
+  /** Cover a full minute of sub-minute cron ticks with buffer. */
+  windowMs = 120_000,
 ): Promise<boolean> {
   await connectDB();
   const since = new Date(Date.now() - windowMs);

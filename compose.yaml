@@ -33,6 +33,8 @@ services:
       NODE_ENV: production
       MONGODB_URI: mongodb://appuser:${MONGO_PASSWORD}@mongodb:27017/habit_tracker?authSource=habit_tracker
       CRON_INTERNAL_URL: http://api:3012
+      # Fire within the scheduled minute (not only at :00) so exact HH:MM is hit after mid-minute saves.
+      CRON_TICK_MS: "5000"
     depends_on:
       mongodb:
         condition: service_healthy
