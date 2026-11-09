@@ -2,14 +2,29 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { apiError, apiOk } from "@/lib/api-response";
 import { requireAdminOrApiKey } from "@/lib/auth/service";
-import { isFirebaseConfigured } from "@/lib/env";
+import { connectDB } from "@/lib/db";
+import { isFirebaseConfigured, type FcmPlatform } from "@/lib/env";
 import { sendHabitPush } from "@/lib/fcm";
+import { User } from "@/models/User";
 
 const schema = z.object({
   fcm_token: z.string().trim().min(1),
-  /** Required when using separate Android/iOS Firebase projects */
+  /** Optional — when omitted, resolved from the registered device record */
   platform: z.enum(["android", "ios"]).optional(),
 });
+
+async function resolvePlatformForToken(token: string, explicit?: FcmPlatform): Promise<FcmPlatform> {
+  if (explicit) return explicit;
+  await connectDB();
+  const user = await User.findOne({
+    $or: [{ fcmTokens: token }, { "deviceMeta.token": token }],
+  })
+    .select({ deviceMeta: 1 })
+    .lean();
+  const meta = user?.deviceMeta?.find((row: { token?: string; platform?: string }) => row.token === token);
+  if (meta?.platform === "android" || meta?.platform === "ios") return meta.platform;
+  return "android";
+}
 
 export async function POST(request: NextRequest) {
   const admin = await requireAdminOrApiKey(request);
@@ -22,9 +37,11 @@ export async function POST(request: NextRequest) {
     return apiError("FIREBASE_NOT_CONFIGURED", "Firebase is not configured", 503);
   }
 
+  const platform = await resolvePlatformForToken(parsed.data.fcm_token, parsed.data.platform);
+
   const result = await sendHabitPush({
     tokens: [parsed.data.fcm_token],
-    platforms: [parsed.data.platform ?? "android"],
+    platforms: [platform],
     userId: admin._id.toString(),
     habitId: "test",
     habitName: "Test Reminder",
@@ -38,5 +55,6 @@ export async function POST(request: NextRequest) {
     failureCount: result.failureCount,
     status: result.status,
     error: result.error,
+    platform,
   });
 }

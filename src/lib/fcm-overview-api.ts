@@ -68,11 +68,24 @@ export async function fetchFcmOverviewAdmin(): Promise<FcmOverviewResponse> {
 
 export async function sendFcmTestNotificationAdmin(
   fcmToken: string,
-): Promise<{ successCount: number; failureCount: number; status?: string; error?: string }> {
-  return apiPost<{ successCount: number; failureCount: number; status?: string; error?: string }>(
-    "/api/admin/fcm/test-notification",
-    { fcm_token: fcmToken },
-  );
+  platform?: "android" | "ios",
+): Promise<{
+  successCount: number;
+  failureCount: number;
+  status?: string;
+  error?: string;
+  platform?: string;
+}> {
+  return apiPost<{
+    successCount: number;
+    failureCount: number;
+    status?: string;
+    error?: string;
+    platform?: string;
+  }>("/api/admin/fcm/test-notification", {
+    fcm_token: fcmToken,
+    ...(platform ? { platform } : {}),
+  });
 }
 
 export function shortUid(uid: string): string {

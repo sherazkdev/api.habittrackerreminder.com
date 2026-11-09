@@ -92,10 +92,11 @@ export default function DevicesPage() {
     setTestingId(row.id);
     setActionMessage("");
     try {
-      const result = await sendFcmTestNotificationAdmin(row.fcmToken);
+      const platform = row.platform === "android" || row.platform === "ios" ? row.platform : undefined;
+      const result = await sendFcmTestNotificationAdmin(row.fcmToken, platform);
       setActionMessage(
         result.successCount > 0
-          ? `Test push sent to ${row.fcmTokenMasked}`
+          ? `Test push sent to ${row.fcmTokenMasked}${result.platform ? ` (${result.platform})` : ""}`
           : result.error || "Test push failed — check the FCM token.",
       );
     } catch (err) {
