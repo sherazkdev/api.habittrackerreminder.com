@@ -7,6 +7,8 @@ import { sendHabitPush } from "@/lib/fcm";
 
 const schema = z.object({
   fcm_token: z.string().trim().min(1),
+  /** Required when using separate Android/iOS Firebase projects */
+  platform: z.enum(["android", "ios"]).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -22,6 +24,7 @@ export async function POST(request: NextRequest) {
 
   const result = await sendHabitPush({
     tokens: [parsed.data.fcm_token],
+    platforms: [parsed.data.platform ?? "android"],
     userId: admin._id.toString(),
     habitId: "test",
     habitName: "Test Reminder",
