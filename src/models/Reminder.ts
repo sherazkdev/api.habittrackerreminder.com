@@ -20,7 +20,10 @@ const ReminderSchema = new Schema(
 );
 
 ReminderSchema.index({ userId: 1, habitId: 1 }, { unique: true });
-ReminderSchema.index({ scheduledTimes: 1, days: 1 });
-ReminderSchema.index({ timezone: 1, scheduledTimes: 1, days: 1 });
+// Do NOT compound-index two array fields together (MongoDB parallel-array limit).
+// That broke reminder upserts with: cannot index parallel arrays [days] [scheduledTimes]
+ReminderSchema.index({ scheduledTimes: 1 });
+ReminderSchema.index({ days: 1 });
+ReminderSchema.index({ timezone: 1, scheduledTimes: 1 });
 
 export const Reminder = models.Reminder ?? model("Reminder", ReminderSchema);
